@@ -1,658 +1,526 @@
 <?php
 /**
- * QA Agent - Quality Assurance & Originality Guard
+ * QA Agent V3 - Quality Assurance and Content Polish
  *
- * This agent is responsible for:
- * - Checking content quality and readability
- * - Ensuring originality (no duplicate content)
- * - Polishing text for human-like writing
- * - SEO optimization checks
- * - Fact consistency verification
- *
- * @link       https://example.com
- * @since      1.0.0
+ * Features:
+ * - Professional Indonesian text spinning
+ * - Human-like writing check
+ * - Plagiarism avoidance
+ * - SEO optimization check
+ * - Grammar and readability improvement
  *
  * @package    TravelSEO_Autopublisher
  * @subpackage TravelSEO_Autopublisher/includes/agents
+ * @version    3.0.0
  */
 
 namespace TravelSEO_Autopublisher\Agents;
 
+use TravelSEO_Autopublisher\Spinner\Spinner;
+
 use function TravelSEO_Autopublisher\tsa_get_option;
 use function TravelSEO_Autopublisher\tsa_update_job;
 use function TravelSEO_Autopublisher\tsa_log_job;
-use function TravelSEO_Autopublisher\tsa_calculate_keyword_density;
-use function TravelSEO_Autopublisher\tsa_get_jobs;
 
 /**
- * QA Agent Class
+ * QA Agent V3 Class
  */
 class QA_Agent {
 
     /**
      * Job ID
-     *
-     * @var int
      */
     private $job_id;
 
     /**
-     * Draft pack from Agent 2
-     *
-     * @var array
+     * Draft pack from Writer Agent
      */
     private $draft_pack;
 
     /**
-     * Research pack from Agent 1
-     *
-     * @var array
+     * Research pack from Research Agent
      */
     private $research_pack;
 
     /**
+     * Job settings
+     */
+    private $settings;
+
+    /**
      * QA results
-     *
-     * @var array
      */
     private $qa_results;
 
     /**
-     * Constructor
-     *
-     * @param int $job_id Job ID
-     * @param array $draft_pack Draft pack from Agent 2
-     * @param array $research_pack Research pack from Agent 1
+     * Spinner instance
      */
-    public function __construct( $job_id, $draft_pack, $research_pack ) {
+    private $spinner;
+
+    /**
+     * Constructor
+     */
+    public function __construct( $job_id, $draft_pack, $research_pack = array() ) {
         $this->job_id = $job_id;
         $this->draft_pack = $draft_pack;
         $this->research_pack = $research_pack;
+        $this->settings = array(
+            'spin_content' => tsa_get_option( 'spin_content', true ),
+            'spin_intensity' => intval( tsa_get_option( 'spin_intensity', 40 ) ),
+            'check_readability' => true,
+            'optimize_seo' => true,
+        );
+
+        // Initialize QA results
         $this->qa_results = array(
             'passed' => true,
             'score' => 0,
+            'readability_score' => 0,
+            'seo_score' => 0,
+            'spin_applied' => false,
+            'spin_percentage' => 0,
             'checks' => array(),
             'improvements' => array(),
             'warnings' => array(),
+            'issues_fixed' => array(),
         );
+
+        // Load Spinner
+        if ( file_exists( TSA_PLUGIN_DIR . 'includes/spinner/class-spinner.php' ) ) {
+            require_once TSA_PLUGIN_DIR . 'includes/spinner/class-spinner.php';
+            $this->spinner = new Spinner();
+        }
     }
 
     /**
      * Run the QA process
-     *
-     * @return array Updated draft pack
      */
     public function run() {
-        tsa_log_job( $this->job_id, 'QA Agent: Starting quality assurance...' );
-        
-        // Update job status
+        tsa_log_job( $this->job_id, 'QA Agent V3: Memulai quality assurance...' );
         tsa_update_job( $this->job_id, array( 'status' => 'qa' ) );
 
-        // Step 1: Check originality (internal duplicate detection)
-        $this->check_originality();
+        $content = $this->draft_pack['content'] ?? '';
 
-        // Step 2: Check readability
-        $this->check_readability();
+        // Step 1: Fix common issues
+        tsa_log_job( $this->job_id, 'QA Agent V3: Memperbaiki masalah umum...' );
+        $content = $this->fix_common_issues( $content );
 
-        // Step 3: Check SEO elements
-        $this->check_seo();
+        // Step 2: Apply spinning if enabled
+        if ( $this->settings['spin_content'] && $this->spinner ) {
+            tsa_log_job( $this->job_id, 'QA Agent V3: Menerapkan spinning untuk naturalness...' );
+            $content = $this->apply_spinning( $content );
+        }
 
-        // Step 4: Check content structure
-        $this->check_structure();
+        // Step 3: Check and improve readability
+        tsa_log_job( $this->job_id, 'QA Agent V3: Memeriksa readability...' );
+        $content = $this->improve_readability( $content );
 
-        // Step 5: Polish content for human-like writing
-        $this->polish_content();
+        // Step 4: Optimize SEO
+        tsa_log_job( $this->job_id, 'QA Agent V3: Optimasi SEO...' );
+        $content = $this->optimize_seo( $content );
 
-        // Step 6: Add disclosure note if enabled
-        $this->add_disclosure();
+        // Step 5: Final polish
+        tsa_log_job( $this->job_id, 'QA Agent V3: Final polish...' );
+        $content = $this->final_polish( $content );
 
-        // Step 7: Calculate final score
-        $this->calculate_score();
+        // Step 6: Calculate scores
+        $this->calculate_scores( $content );
 
-        // Add QA results to draft pack
+        // Update draft pack
+        $this->draft_pack['content'] = $content;
+        $this->draft_pack['word_count'] = str_word_count( strip_tags( $content ) );
         $this->draft_pack['qa_results'] = $this->qa_results;
 
-        tsa_log_job( $this->job_id, 'QA Agent: Completed. Score: ' . $this->qa_results['score'] . '/100' );
+        // Convert to HTML
+        $this->draft_pack['content_html'] = $this->convert_to_html( $content );
+
+        tsa_log_job( $this->job_id, 'QA Agent V3: Selesai. Score: ' . $this->qa_results['score'] . '/100' );
 
         return $this->draft_pack;
     }
 
     /**
-     * Check content originality (internal duplicate detection)
+     * Fix common issues in content
      */
-    private function check_originality() {
-        $content = $this->draft_pack['content'];
-        $title = $this->draft_pack['title'];
-        
-        // Get existing jobs to compare
-        $existing_jobs = tsa_get_jobs( array(
-            'status' => 'ready',
-            'limit' => 50,
-        ) );
-        
-        $duplicates_found = false;
-        $similarity_threshold = 0.7; // 70% similarity threshold
-        
-        // Extract n-grams from current content
-        $current_ngrams = $this->extract_ngrams( $content, 3 );
-        
-        foreach ( $existing_jobs as $job ) {
-            if ( $job->id == $this->job_id ) {
-                continue;
-            }
-            
-            $existing_draft = json_decode( $job->draft_pack, true );
-            if ( empty( $existing_draft['content'] ) ) {
-                continue;
-            }
-            
-            $existing_ngrams = $this->extract_ngrams( $existing_draft['content'], 3 );
-            
-            // Calculate Jaccard similarity
-            $intersection = count( array_intersect( $current_ngrams, $existing_ngrams ) );
-            $union = count( array_unique( array_merge( $current_ngrams, $existing_ngrams ) ) );
-            
-            if ( $union > 0 ) {
-                $similarity = $intersection / $union;
-                
-                if ( $similarity > $similarity_threshold ) {
-                    $duplicates_found = true;
-                    $this->qa_results['warnings'][] = "Konten memiliki kemiripan tinggi ({$similarity}%) dengan artikel ID #{$job->id}";
-                }
-            }
+    private function fix_common_issues( $content ) {
+        $issues_fixed = array();
+
+        // Fix double spaces
+        $before = $content;
+        $content = preg_replace( '/[ \t]+/', ' ', $content );
+        $content = preg_replace( '/\n\s*\n\s*\n+/', "\n\n", $content );
+        if ( $before !== $content ) {
+            $issues_fixed[] = 'Memperbaiki spasi berlebihan';
         }
-        
-        $this->qa_results['checks']['originality'] = array(
-            'passed' => ! $duplicates_found,
-            'message' => $duplicates_found ? 'Ditemukan kemiripan dengan artikel lain' : 'Konten original',
+
+        // Fix punctuation spacing
+        $before = $content;
+        $content = preg_replace( '/\s+([.,!?;:])/', '$1', $content );
+        $content = preg_replace( '/([.,!?;:])([A-Za-z])/', '$1 $2', $content );
+        if ( $before !== $content ) {
+            $issues_fixed[] = 'Memperbaiki spasi tanda baca';
+        }
+
+        // Fix capitalization after periods
+        $before = $content;
+        $content = preg_replace_callback( '/\.\s+([a-z])/', function( $matches ) {
+            return '. ' . strtoupper( $matches[1] );
+        }, $content );
+        if ( $before !== $content ) {
+            $issues_fixed[] = 'Memperbaiki kapitalisasi';
+        }
+
+        // Remove AI-like phrases
+        $ai_phrases = array(
+            'Tentu saja,',
+            'Tentu,',
+            'Baiklah,',
+            'Sebagai AI,',
+            'Sebagai asisten,',
+            'Saya akan membantu',
+            'Mari kita bahas',
+            'Tidak diragukan lagi,',
+            'Dengan senang hati,',
+            'Berikut adalah',
         );
         
-        tsa_log_job( $this->job_id, 'QA Agent: Originality check ' . ( $duplicates_found ? 'WARNING' : 'PASSED' ) );
-    }
-
-    /**
-     * Extract n-grams from text
-     *
-     * @param string $text Text to analyze
-     * @param int $n N-gram size
-     * @return array
-     */
-    private function extract_ngrams( $text, $n = 3 ) {
-        $text = strtolower( wp_strip_all_tags( $text ) );
-        $text = preg_replace( '/[^a-z0-9\s]/', '', $text );
-        $words = preg_split( '/\s+/', $text );
-        
-        $ngrams = array();
-        for ( $i = 0; $i <= count( $words ) - $n; $i++ ) {
-            $ngram = implode( ' ', array_slice( $words, $i, $n ) );
-            $ngrams[] = $ngram;
-        }
-        
-        return array_unique( $ngrams );
-    }
-
-    /**
-     * Check content readability
-     */
-    private function check_readability() {
-        $content = wp_strip_all_tags( $this->draft_pack['content'] );
-        
-        // Count sentences
-        $sentences = preg_split( '/[.!?]+/', $content, -1, PREG_SPLIT_NO_EMPTY );
-        $sentence_count = count( $sentences );
-        
-        // Count words
-        $word_count = str_word_count( $content );
-        
-        // Calculate average sentence length
-        $avg_sentence_length = $sentence_count > 0 ? $word_count / $sentence_count : 0;
-        
-        // Check for long sentences (over 25 words)
-        $long_sentences = 0;
-        foreach ( $sentences as $sentence ) {
-            if ( str_word_count( $sentence ) > 25 ) {
-                $long_sentences++;
+        foreach ( $ai_phrases as $phrase ) {
+            if ( stripos( $content, $phrase ) !== false ) {
+                $content = str_ireplace( $phrase, '', $content );
+                $issues_fixed[] = 'Menghapus frasa AI: ' . $phrase;
             }
         }
-        
-        // Check paragraph length
-        $paragraphs = preg_split( '/\n\n+/', $content );
-        $short_paragraphs = 0;
-        foreach ( $paragraphs as $para ) {
-            if ( str_word_count( $para ) < 20 ) {
-                $short_paragraphs++;
-            }
-        }
-        
-        // Readability score (simplified)
-        $readability_score = 100;
-        
-        // Penalize for too long average sentences
-        if ( $avg_sentence_length > 20 ) {
-            $readability_score -= ( $avg_sentence_length - 20 ) * 2;
-        }
-        
-        // Penalize for too many long sentences
-        if ( $sentence_count > 0 ) {
-            $long_sentence_ratio = $long_sentences / $sentence_count;
-            if ( $long_sentence_ratio > 0.3 ) {
-                $readability_score -= 10;
-            }
-        }
-        
-        $readability_score = max( 0, min( 100, $readability_score ) );
-        
-        $this->qa_results['checks']['readability'] = array(
-            'passed' => $readability_score >= 60,
-            'score' => $readability_score,
-            'avg_sentence_length' => round( $avg_sentence_length, 1 ),
-            'long_sentences' => $long_sentences,
-            'message' => $readability_score >= 60 ? 'Keterbacaan baik' : 'Perlu perbaikan keterbacaan',
-        );
-        
-        if ( $readability_score < 60 ) {
-            $this->qa_results['improvements'][] = 'Pecah kalimat panjang menjadi kalimat yang lebih pendek';
-        }
-        
-        tsa_log_job( $this->job_id, 'QA Agent: Readability score: ' . $readability_score );
-    }
 
-    /**
-     * Check SEO elements
-     */
-    private function check_seo() {
-        $title = $this->draft_pack['title'];
-        $meta_title = $this->draft_pack['meta_title'];
-        $meta_desc = $this->draft_pack['meta_description'];
-        $content = $this->draft_pack['content'];
-        
-        $seo_checks = array();
-        
-        // Check meta title length
-        $meta_title_length = strlen( $meta_title );
-        $seo_checks['meta_title'] = array(
-            'passed' => $meta_title_length >= 50 && $meta_title_length <= 60,
-            'length' => $meta_title_length,
-            'message' => $meta_title_length >= 50 && $meta_title_length <= 60 
-                ? 'Meta title optimal' 
-                : 'Meta title harus 50-60 karakter (sekarang: ' . $meta_title_length . ')',
-        );
-        
-        // Check meta description length
-        $meta_desc_length = strlen( $meta_desc );
-        $seo_checks['meta_description'] = array(
-            'passed' => $meta_desc_length >= 150 && $meta_desc_length <= 160,
-            'length' => $meta_desc_length,
-            'message' => $meta_desc_length >= 150 && $meta_desc_length <= 160 
-                ? 'Meta description optimal' 
-                : 'Meta description harus 150-160 karakter (sekarang: ' . $meta_desc_length . ')',
-        );
-        
-        // Check keyword in title
-        $keyword = strtolower( $title );
-        $keyword_in_meta = stripos( $meta_title, $title ) !== false;
-        $seo_checks['keyword_in_title'] = array(
-            'passed' => $keyword_in_meta,
-            'message' => $keyword_in_meta ? 'Keyword ada di meta title' : 'Tambahkan keyword ke meta title',
-        );
-        
-        // Check keyword density
-        $keyword_density = tsa_calculate_keyword_density( $content, $title );
-        $seo_checks['keyword_density'] = array(
-            'passed' => $keyword_density >= 0.5 && $keyword_density <= 2.5,
-            'density' => $keyword_density,
-            'message' => $keyword_density >= 0.5 && $keyword_density <= 2.5 
-                ? 'Keyword density optimal (' . $keyword_density . '%)' 
-                : 'Keyword density harus 0.5-2.5% (sekarang: ' . $keyword_density . '%)',
-        );
-        
-        // Check heading structure
-        preg_match_all( '/<h2[^>]*>/', $content, $h2_matches );
-        $h2_count = count( $h2_matches[0] );
-        $seo_checks['headings'] = array(
-            'passed' => $h2_count >= 5,
-            'count' => $h2_count,
-            'message' => $h2_count >= 5 ? 'Struktur heading baik' : 'Tambahkan lebih banyak H2 (minimal 5)',
-        );
-        
-        // Check word count
-        $word_count = $this->draft_pack['word_count'];
-        $seo_checks['word_count'] = array(
-            'passed' => $word_count >= 1500,
-            'count' => $word_count,
-            'message' => $word_count >= 1500 ? 'Panjang artikel cukup' : 'Artikel terlalu pendek (minimal 1500 kata)',
-        );
-        
-        // Check internal links
-        $internal_links_count = count( $this->draft_pack['internal_links'] ?? array() );
-        $seo_checks['internal_links'] = array(
-            'passed' => $internal_links_count >= 2,
-            'count' => $internal_links_count,
-            'message' => $internal_links_count >= 2 ? 'Internal links cukup' : 'Tambahkan internal links',
-        );
-        
-        $this->qa_results['checks']['seo'] = $seo_checks;
-        
-        // Add improvements
-        foreach ( $seo_checks as $check ) {
-            if ( ! $check['passed'] ) {
-                $this->qa_results['improvements'][] = $check['message'];
-            }
-        }
-        
-        tsa_log_job( $this->job_id, 'QA Agent: SEO checks completed.' );
-    }
-
-    /**
-     * Check content structure
-     */
-    private function check_structure() {
-        $content = $this->draft_pack['content'];
-        
-        $structure_checks = array();
-        
-        // Check for introduction
-        $has_intro = preg_match( '/<p>.*?<\/p>.*?<h2/s', $content );
-        $structure_checks['introduction'] = array(
-            'passed' => (bool) $has_intro,
-            'message' => $has_intro ? 'Ada paragraf pembuka' : 'Tambahkan paragraf pembuka sebelum H2 pertama',
-        );
-        
-        // Check for conclusion
-        $has_conclusion = stripos( $content, 'kesimpulan' ) !== false || stripos( $content, 'penutup' ) !== false;
-        $structure_checks['conclusion'] = array(
-            'passed' => $has_conclusion,
-            'message' => $has_conclusion ? 'Ada kesimpulan' : 'Tambahkan bagian kesimpulan',
-        );
-        
-        // Check for lists (ul/ol)
-        $has_lists = preg_match( '/<[uo]l>/', $content );
-        $structure_checks['lists'] = array(
-            'passed' => (bool) $has_lists,
-            'message' => $has_lists ? 'Ada daftar/list' : 'Tambahkan daftar untuk meningkatkan keterbacaan',
-        );
-        
-        // Check for tables
-        $has_tables = preg_match( '/<table/', $content );
-        $structure_checks['tables'] = array(
-            'passed' => (bool) $has_tables,
-            'message' => $has_tables ? 'Ada tabel' : 'Pertimbangkan menambahkan tabel untuk data',
-        );
-        
-        // Check for FAQ section
-        $has_faq = ! empty( $this->draft_pack['faq'] );
-        $structure_checks['faq'] = array(
-            'passed' => $has_faq,
-            'message' => $has_faq ? 'Ada FAQ section' : 'Tambahkan FAQ section',
-        );
-        
-        $this->qa_results['checks']['structure'] = $structure_checks;
-        
-        tsa_log_job( $this->job_id, 'QA Agent: Structure checks completed.' );
-    }
-
-    /**
-     * Polish content for human-like writing
-     */
-    private function polish_content() {
-        $content = $this->draft_pack['content'];
-        
-        // Check if AI is available for polishing
-        if ( $this->has_ai_api() ) {
-            $content = $this->polish_with_ai( $content );
-        } else {
-            $content = $this->polish_without_ai( $content );
-        }
-        
-        $this->draft_pack['content'] = $content;
-        
-        tsa_log_job( $this->job_id, 'QA Agent: Content polished.' );
-    }
-
-    /**
-     * Polish content without AI
-     *
-     * @param string $content Content to polish
-     * @return string
-     */
-    private function polish_without_ai( $content ) {
-        // Remove repeated phrases
-        $content = $this->remove_repetitions( $content );
-        
-        // Fix common issues
-        $content = $this->fix_common_issues( $content );
-        
-        // Add variety to sentence starters
-        $content = $this->vary_sentence_starters( $content );
-        
-        return $content;
-    }
-
-    /**
-     * Remove repeated phrases
-     *
-     * @param string $content Content
-     * @return string
-     */
-    private function remove_repetitions( $content ) {
-        // Find and reduce repeated phrases
-        $patterns = array(
-            '/(\b\w+\b)\s+\1/i' => '$1', // Remove immediate word repetition
+        // Fix repeated words
+        $repeated_patterns = array(
+            '/(\b\w+\b)\s+\1\b/i' => '$1',
             '/yang yang/i' => 'yang',
             '/dan dan/i' => 'dan',
             '/di di/i' => 'di',
             '/untuk untuk/i' => 'untuk',
+            '/dengan dengan/i' => 'dengan',
         );
         
-        foreach ( $patterns as $pattern => $replacement ) {
+        foreach ( $repeated_patterns as $pattern => $replacement ) {
+            $before = $content;
             $content = preg_replace( $pattern, $replacement, $content );
+            if ( $before !== $content ) {
+                $issues_fixed[] = 'Memperbaiki kata berulang';
+            }
         }
-        
+
+        // Ensure brand mention
+        if ( stripos( $content, 'sekali.id' ) === false ) {
+            $content = preg_replace(
+                '/^([^.]+\.)/',
+                'sekali.id menyajikan informasi lengkap tentang $1',
+                $content,
+                1
+            );
+            $issues_fixed[] = 'Menambahkan brand mention sekali.id';
+        }
+
+        $this->qa_results['issues_fixed'] = array_merge( $this->qa_results['issues_fixed'], $issues_fixed );
+
         return $content;
     }
 
     /**
-     * Fix common writing issues
-     *
-     * @param string $content Content
-     * @return string
+     * Apply text spinning for naturalness
      */
-    private function fix_common_issues( $content ) {
-        // Fix common Indonesian writing issues
-        $fixes = array(
-            '/\s+,/' => ',',
-            '/\s+\./' => '.',
-            '/\s+\?/' => '?',
-            '/\s+!/' => '!',
-            '/\s{2,}/' => ' ',
-            '/\n{3,}/' => "\n\n",
-        );
+    private function apply_spinning( $content ) {
+        $title = $this->draft_pack['title'] ?? '';
         
-        foreach ( $fixes as $pattern => $replacement ) {
-            $content = preg_replace( $pattern, $replacement, $content );
+        // Preserve keywords
+        $preserve = array( $title, 'sekali.id', 'Indonesia' );
+        
+        // Extract important keywords from title
+        $title_words = explode( ' ', $title );
+        foreach ( $title_words as $word ) {
+            if ( strlen( $word ) > 4 ) {
+                $preserve[] = $word;
+            }
         }
+
+        // Apply spinning
+        $spun_content = $this->spinner->spin(
+            $content,
+            $this->settings['spin_intensity'],
+            $preserve
+        );
+
+        // Calculate spin percentage
+        $original_words = str_word_count( $content );
+        $changed_words = 0;
         
-        return $content;
+        $original_arr = explode( ' ', strtolower( $content ) );
+        $spun_arr = explode( ' ', strtolower( $spun_content ) );
+        
+        for ( $i = 0; $i < min( count( $original_arr ), count( $spun_arr ) ); $i++ ) {
+            if ( isset( $original_arr[ $i ] ) && isset( $spun_arr[ $i ] ) ) {
+                if ( $original_arr[ $i ] !== $spun_arr[ $i ] ) {
+                    $changed_words++;
+                }
+            }
+        }
+
+        $spin_percentage = $original_words > 0 ? round( ( $changed_words / $original_words ) * 100, 1 ) : 0;
+
+        $this->qa_results['spin_applied'] = true;
+        $this->qa_results['spin_percentage'] = $spin_percentage;
+
+        tsa_log_job( $this->job_id, "QA Agent V3: Spinning diterapkan ({$spin_percentage}% kata diubah)" );
+
+        return $spun_content;
     }
 
     /**
-     * Add variety to sentence starters
-     *
-     * @param string $content Content
-     * @return string
+     * Improve readability
      */
-    private function vary_sentence_starters( $content ) {
-        // This is a simplified version
-        // In production, this would be more sophisticated
-        
-        $starters = array(
+    private function improve_readability( $content ) {
+        // Break very long sentences (over 200 chars)
+        $content = preg_replace_callback( '/([^.!?]{200,})[.!?]/', function( $matches ) {
+            $sentence = $matches[1];
+            $break_points = array( ', dan ', ', serta ', ', namun ', ', tetapi ', ', karena ', ', sehingga ', ', yang ' );
+            
+            foreach ( $break_points as $bp ) {
+                $pos = strpos( $sentence, $bp );
+                if ( $pos !== false && $pos > 50 ) {
+                    $sentence = substr( $sentence, 0, $pos + strlen( $bp ) - 1 ) . '. ' . ucfirst( substr( $sentence, $pos + strlen( $bp ) ) );
+                    break;
+                }
+            }
+            
+            return $sentence . '.';
+        }, $content );
+
+        // Add transition words to some paragraphs
+        $paragraphs = explode( "\n\n", $content );
+        $transitions = array(
             'Selain itu, ',
             'Di samping itu, ',
-            'Tidak hanya itu, ',
             'Lebih lanjut, ',
+            'Perlu diketahui bahwa ',
             'Menariknya, ',
-            'Perlu diketahui, ',
-            'Yang tak kalah penting, ',
+            'Yang tidak kalah penting, ',
+            'Tak hanya itu, ',
         );
-        
-        // Count consecutive paragraphs starting with same word
-        // This is a basic implementation
-        
+
+        for ( $i = 2; $i < count( $paragraphs ); $i++ ) {
+            if ( $i % 4 === 0 && ! empty( $paragraphs[ $i ] ) ) {
+                $first_char = substr( trim( $paragraphs[ $i ] ), 0, 1 );
+                if ( ctype_upper( $first_char ) && strpos( $paragraphs[ $i ], '##' ) === false ) {
+                    $transition = $transitions[ array_rand( $transitions ) ];
+                    $paragraphs[ $i ] = $transition . lcfirst( trim( $paragraphs[ $i ] ) );
+                }
+            }
+        }
+
+        return implode( "\n\n", $paragraphs );
+    }
+
+    /**
+     * Optimize SEO
+     */
+    private function optimize_seo( $content ) {
+        $title = $this->draft_pack['title'] ?? '';
+        $keyword = strtolower( $title );
+
+        // Check keyword density
+        $content_lower = strtolower( $content );
+        $word_count = str_word_count( $content );
+        $keyword_count = substr_count( $content_lower, $keyword );
+        $keyword_density = $word_count > 0 ? ( $keyword_count / $word_count ) * 100 : 0;
+
+        // If keyword density is too low, add keyword naturally
+        if ( $keyword_density < 0.5 && $keyword_count < 3 ) {
+            $additions = array(
+                "\n\nBagi Anda yang tertarik mengunjungi {$title}, informasi di atas semoga dapat membantu perencanaan perjalanan Anda.",
+                "\n\n{$title} memang layak untuk dikunjungi dan menjadi salah satu destinasi favorit wisatawan.",
+            );
+            
+            $content .= $additions[ array_rand( $additions ) ];
+            $this->qa_results['improvements'][] = 'Menambahkan keyword untuk SEO';
+        }
+
         return $content;
     }
 
     /**
-     * Polish content with AI
-     *
-     * @param string $content Content to polish
-     * @return string
+     * Final polish
      */
-    private function polish_with_ai( $content ) {
-        $api_key = tsa_get_option( 'openai_api_key', '' );
-        $api_endpoint = tsa_get_option( 'openai_endpoint', 'https://api.openai.com/v1/chat/completions' );
-        $model = tsa_get_option( 'openai_model', 'gpt-3.5-turbo' );
-        
-        $prompt = "Perbaiki artikel berikut agar lebih natural dan mudah dibaca. Pertahankan semua informasi dan struktur HTML. Perbaiki:
-1. Kalimat yang terlalu panjang atau rumit
-2. Pengulangan kata/frasa yang tidak perlu
-3. Transisi antar paragraf
-4. Variasi kalimat pembuka
+    private function final_polish( $content ) {
+        // Ensure proper paragraph breaks
+        $content = preg_replace( '/([.!?])\s*\n\s*([A-Z])/', "$1\n\n$2", $content );
 
-Jangan mengubah fakta atau menambah informasi baru. Output harus dalam format HTML yang sama.
+        // Remove weird characters
+        $content = preg_replace( '/[^\x20-\x7E\x{00A0}-\x{FFFF}\n#*|\-_\[\]()]/u', '', $content );
 
-Artikel:
-{$content}";
-
-        $response = wp_remote_post( $api_endpoint, array(
-            'timeout' => 120,
-            'headers' => array(
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type' => 'application/json',
-            ),
-            'body' => wp_json_encode( array(
-                'model' => $model,
-                'messages' => array(
-                    array(
-                        'role' => 'system',
-                        'content' => 'Kamu adalah editor profesional yang ahli dalam memperbaiki tulisan Bahasa Indonesia. Tugasmu adalah memperbaiki kualitas tulisan tanpa mengubah fakta atau struktur.',
-                    ),
-                    array(
-                        'role' => 'user',
-                        'content' => $prompt,
-                    ),
-                ),
-                'temperature' => 0.3,
-                'max_tokens' => 4000,
-            ) ),
-        ) );
-
-        if ( is_wp_error( $response ) ) {
-            tsa_log_job( $this->job_id, 'QA Agent: AI polish failed - ' . $response->get_error_message() );
-            return $this->polish_without_ai( $content );
+        // Ensure content ends properly
+        $content = trim( $content );
+        if ( ! preg_match( '/[.!?*]$/', $content ) ) {
+            $content .= '.';
         }
 
-        $body = wp_remote_retrieve_body( $response );
-        $data = json_decode( $body, true );
-
-        if ( isset( $data['choices'][0]['message']['content'] ) ) {
-            return $data['choices'][0]['message']['content'];
+        // Add disclaimer if not present
+        if ( stripos( $content, 'Disclaimer' ) === false && stripos( $content, 'dapat berubah' ) === false ) {
+            $content .= "\n\n*Disclaimer: Informasi dalam artikel ini dapat berubah sewaktu-waktu. Untuk informasi terkini, silakan hubungi pihak pengelola atau kunjungi sumber resmi.*";
         }
 
-        return $this->polish_without_ai( $content );
+        return $content;
     }
 
     /**
-     * Add disclosure note if enabled
+     * Calculate quality scores
      */
-    private function add_disclosure() {
-        $add_disclosure = tsa_get_option( 'add_disclosure', true );
-        
-        if ( ! $add_disclosure ) {
-            return;
-        }
-        
-        $disclosure = '<p><em><strong>Disclaimer:</strong> Informasi dalam artikel ini dapat berubah sewaktu-waktu. Untuk informasi terkini, silakan hubungi pihak pengelola atau kunjungi sumber resmi.</em></p>';
-        
-        // Add disclosure before closing
-        $this->draft_pack['content'] .= "\n\n" . $disclosure;
-    }
+    private function calculate_scores( $content ) {
+        // Readability score
+        $readability = 50;
 
-    /**
-     * Calculate final QA score
-     */
-    private function calculate_score() {
-        $total_checks = 0;
-        $passed_checks = 0;
-        
-        // Count originality
-        if ( isset( $this->qa_results['checks']['originality']['passed'] ) ) {
-            $total_checks++;
-            if ( $this->qa_results['checks']['originality']['passed'] ) {
-                $passed_checks++;
-            }
+        $word_count = str_word_count( strip_tags( $content ) );
+        if ( $word_count >= 800 && $word_count <= 2000 ) {
+            $readability += 15;
+        } elseif ( $word_count >= 500 ) {
+            $readability += 10;
         }
-        
-        // Count readability
-        if ( isset( $this->qa_results['checks']['readability']['passed'] ) ) {
-            $total_checks++;
-            if ( $this->qa_results['checks']['readability']['passed'] ) {
-                $passed_checks++;
-            }
+
+        $paragraphs = explode( "\n\n", $content );
+        $avg_para_length = array_sum( array_map( 'str_word_count', $paragraphs ) ) / max( count( $paragraphs ), 1 );
+        if ( $avg_para_length >= 30 && $avg_para_length <= 100 ) {
+            $readability += 15;
         }
-        
-        // Count SEO checks
-        if ( isset( $this->qa_results['checks']['seo'] ) ) {
-            foreach ( $this->qa_results['checks']['seo'] as $check ) {
-                $total_checks++;
-                if ( $check['passed'] ) {
-                    $passed_checks++;
-                }
-            }
+
+        if ( preg_match_all( '/^##\s/m', $content ) >= 2 ) {
+            $readability += 10;
         }
-        
-        // Count structure checks
-        if ( isset( $this->qa_results['checks']['structure'] ) ) {
-            foreach ( $this->qa_results['checks']['structure'] as $check ) {
-                $total_checks++;
-                if ( $check['passed'] ) {
-                    $passed_checks++;
-                }
-            }
+
+        if ( strpos( $content, '- ' ) !== false ) {
+            $readability += 5;
         }
-        
-        // Calculate score
-        $this->qa_results['score'] = $total_checks > 0 
-            ? round( ( $passed_checks / $total_checks ) * 100 ) 
-            : 0;
-        
+
+        if ( strpos( $content, '|' ) !== false ) {
+            $readability += 5;
+        }
+
+        $this->qa_results['readability_score'] = min( $readability, 100 );
+
+        // SEO score
+        $seo = 50;
+        $title = strtolower( $this->draft_pack['title'] ?? '' );
+
+        if ( stripos( $content, $title ) !== false ) {
+            $seo += 20;
+        }
+
+        $keyword_count = substr_count( strtolower( $content ), $title );
+        $keyword_density = $word_count > 0 ? ( $keyword_count / $word_count ) * 100 : 0;
+        if ( $keyword_density >= 0.5 && $keyword_density <= 2.5 ) {
+            $seo += 15;
+        }
+
+        if ( preg_match( '/\[.+\]\(.+\)/', $content ) ) {
+            $seo += 10;
+        }
+
+        if ( ! empty( $this->draft_pack['meta_description'] ) ) {
+            $seo += 5;
+        }
+
+        $this->qa_results['seo_score'] = min( $seo, 100 );
+
+        // Overall score
+        $this->qa_results['score'] = round( ( $this->qa_results['readability_score'] + $this->qa_results['seo_score'] ) / 2 );
         $this->qa_results['passed'] = $this->qa_results['score'] >= 60;
+
+        // Add checks
+        $this->qa_results['checks'] = array(
+            'readability' => array(
+                'passed' => $this->qa_results['readability_score'] >= 60,
+                'score' => $this->qa_results['readability_score'],
+                'message' => $this->qa_results['readability_score'] >= 60 ? 'Keterbacaan baik' : 'Perlu perbaikan',
+            ),
+            'seo' => array(
+                'passed' => $this->qa_results['seo_score'] >= 60,
+                'score' => $this->qa_results['seo_score'],
+                'message' => $this->qa_results['seo_score'] >= 60 ? 'SEO optimal' : 'Perlu optimasi SEO',
+            ),
+            'word_count' => array(
+                'passed' => $word_count >= 700,
+                'count' => $word_count,
+                'message' => $word_count >= 700 ? 'Panjang artikel cukup' : 'Artikel terlalu pendek',
+            ),
+        );
     }
 
     /**
-     * Check if AI API is available
-     *
-     * @return bool
+     * Convert Markdown to HTML
      */
-    private function has_ai_api() {
-        $api_key = tsa_get_option( 'openai_api_key', '' );
-        return ! empty( $api_key );
+    private function convert_to_html( $content ) {
+        // Headers
+        $content = preg_replace( '/^### (.+)$/m', '<h3>$1</h3>', $content );
+        $content = preg_replace( '/^## (.+)$/m', '<h2>$1</h2>', $content );
+
+        // Bold and italic
+        $content = preg_replace( '/\*\*(.+?)\*\*/', '<strong>$1</strong>', $content );
+        $content = preg_replace( '/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/', '<em>$1</em>', $content );
+
+        // Links
+        $content = preg_replace( '/\[([^\]]+)\]\(([^)]+)\)/', '<a href="$2">$1</a>', $content );
+
+        // Lists
+        $content = preg_replace( '/^- (.+)$/m', '<li>$1</li>', $content );
+        $content = preg_replace( '/(<li>.*<\/li>\n?)+/', '<ul>$0</ul>', $content );
+
+        // Tables
+        $content = $this->convert_markdown_tables( $content );
+
+        // Paragraphs
+        $content = preg_replace( '/\n\n+/', '</p><p>', $content );
+        $content = '<p>' . $content . '</p>';
+
+        // Cleanup
+        $content = str_replace( '<p></p>', '', $content );
+        $content = str_replace( '<p><h', '<h', $content );
+        $content = str_replace( '</h2></p>', '</h2>', $content );
+        $content = str_replace( '</h3></p>', '</h3>', $content );
+        $content = str_replace( '<p><ul>', '<ul>', $content );
+        $content = str_replace( '</ul></p>', '</ul>', $content );
+        $content = str_replace( '<p><table', '<table', $content );
+        $content = str_replace( '</table></p>', '</table>', $content );
+        $content = str_replace( '<p>---</p>', '<hr>', $content );
+        $content = str_replace( '<p><hr></p>', '<hr>', $content );
+
+        return $content;
     }
 
     /**
-     * Get the draft pack
-     *
-     * @return array
+     * Convert Markdown tables to HTML
      */
-    public function get_draft_pack() {
-        return $this->draft_pack;
-    }
-
-    /**
-     * Get QA results
-     *
-     * @return array
-     */
-    public function get_qa_results() {
-        return $this->qa_results;
+    private function convert_markdown_tables( $content ) {
+        $pattern = '/\|(.+)\|\n\|[-| ]+\|\n((?:\|.+\|\n?)+)/';
+        
+        return preg_replace_callback( $pattern, function( $matches ) {
+            $header_cells = array_map( 'trim', explode( '|', trim( $matches[1], '|' ) ) );
+            $rows = explode( "\n", trim( $matches[2] ) );
+            
+            $html = '<table class="tsa-table"><thead><tr>';
+            foreach ( $header_cells as $cell ) {
+                $html .= '<th>' . trim( $cell ) . '</th>';
+            }
+            $html .= '</tr></thead><tbody>';
+            
+            foreach ( $rows as $row ) {
+                if ( empty( trim( $row ) ) ) continue;
+                $cells = array_map( 'trim', explode( '|', trim( $row, '|' ) ) );
+                $html .= '<tr>';
+                foreach ( $cells as $cell ) {
+                    $html .= '<td>' . trim( $cell ) . '</td>';
+                }
+                $html .= '</tr>';
+            }
+            
+            $html .= '</tbody></table>';
+            return $html;
+        }, $content );
     }
 }

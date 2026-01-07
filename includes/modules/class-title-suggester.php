@@ -1,121 +1,119 @@
 <?php
 /**
- * AI Title Suggester
+ * AI Title Suggester V2
  *
- * Generates SEO-optimized, click-worthy article title suggestions
- * based on user keywords using AI or built-in templates.
+ * Generates SEO-optimized, short and punchy article title suggestions
+ * Maximum 8 words, no symbols like ":", "-", "&", etc.
+ * Focus on natural, search-friendly titles.
  *
  * @package    TravelSEO_Autopublisher
  * @subpackage TravelSEO_Autopublisher/includes/modules
+ * @version    2.0.0
  */
 
 namespace TravelSEO_Autopublisher\Modules;
 
 /**
- * Title Suggester Class
+ * Title Suggester Class V2
  *
- * Provides intelligent title suggestions for travel/tourism content.
+ * Provides intelligent, SEO-focused title suggestions for travel/tourism content.
+ * Rules:
+ * - Maximum 8 words
+ * - No symbols (:, -, &, |, etc)
+ * - Natural language
+ * - SEO optimized
  */
 class Title_Suggester {
 
     /**
      * Title templates for different content types
+     * All templates follow: max 8 words, no symbols
      *
      * @var array
      */
     private $templates = array(
         'destinasi' => array(
-            '[TAHUN] Panduan Lengkap {keyword}: Harga Tiket, Jam Buka & Tips Berkunjung',
-            '{keyword} - Destinasi Wisata yang Wajib Dikunjungi di {lokasi}',
-            'Mengunjungi {keyword}: Pengalaman Tak Terlupakan yang Harus Anda Coba',
-            'Pesona {keyword}: Surga Tersembunyi yang Jarang Diketahui Wisatawan',
-            '{keyword} [TAHUN]: Review Lengkap, Foto & Pengalaman Pribadi',
-            'Eksplorasi {keyword}: Panduan Wisata Terlengkap untuk Pemula',
-            'Keindahan {keyword} yang Memukau - Wajib Masuk Bucket List!',
-            'Rahasia {keyword}: Tips dari Warga Lokal yang Jarang Dibagikan',
-            '{keyword}: Semua yang Perlu Anda Tahu Sebelum Berkunjung',
-            'Liburan Seru di {keyword} - Aktivitas, Biaya & Rekomendasi',
+            // Pattern: [Keyword] + [Benefit/Action] + [Year optional]
+            '{keyword} Panduan Wisata Lengkap Terbaru',
+            'Wisata {keyword} Info Tiket dan Jam Buka',
+            '{keyword} Tempat Liburan Wajib Dikunjungi',
+            'Jelajahi {keyword} Destinasi Favorit Wisatawan',
+            '{keyword} Review Lengkap dan Tips Berkunjung',
+            'Liburan Seru di {keyword} Panduan Lengkap',
+            '{keyword} Spot Wisata Tersembunyi yang Menakjubkan',
+            'Mengunjungi {keyword} Pengalaman Wisata Terbaik',
+            '{keyword} Destinasi Hits untuk Liburan Keluarga',
+            'Pesona {keyword} yang Wajib Anda Kunjungi',
+            '{keyword} Tempat Wisata Instagramable Terpopuler',
+            'Eksplorasi {keyword} Panduan Wisatawan Pemula',
         ),
         'kuliner' => array(
-            '{keyword}: Kuliner Legendaris yang Wajib Dicoba di {lokasi}',
-            'Berburu {keyword} - Rekomendasi Tempat Makan Terbaik [TAHUN]',
-            'Mencicipi {keyword}: Pengalaman Kuliner Autentik di {lokasi}',
-            '{keyword} Paling Enak di {lokasi} - Review Jujur & Harga',
-            'Wisata Kuliner {lokasi}: Menikmati {keyword} yang Legendaris',
-            'Rekomendasi {keyword} di {lokasi}: Dari yang Murah Sampai Premium',
-            '{keyword} {lokasi}: Cita Rasa yang Bikin Ketagihan',
-            'Hunting {keyword} di {lokasi} - Panduan Lengkap untuk Foodie',
-            'Kelezatan {keyword}: Kuliner Khas {lokasi} yang Menggugah Selera',
-            '{keyword} Terenak di {lokasi} [TAHUN] - Wajib Coba!',
+            '{keyword} Kuliner Legendaris Wajib Dicoba',
+            'Wisata Kuliner {keyword} Rekomendasi Terbaik',
+            '{keyword} Makanan Enak Harga Terjangkau',
+            'Mencicipi {keyword} Pengalaman Kuliner Autentik',
+            '{keyword} Tempat Makan Favorit Wisatawan',
+            'Berburu {keyword} Kuliner Khas Daerah',
+            '{keyword} Review Makanan dan Harga Terbaru',
+            'Kelezatan {keyword} yang Bikin Ketagihan',
+            '{keyword} Rekomendasi Kuliner Lokal Terpopuler',
+            'Menikmati {keyword} Cita Rasa Nusantara',
+            '{keyword} Spot Kuliner Hits dan Viral',
+            'Hunting {keyword} Panduan Lengkap Foodie',
         ),
         'hotel' => array(
-            'Review {keyword}: Penginapan Terbaik di {lokasi} [TAHUN]',
-            '{keyword} - Pengalaman Menginap Mewah dengan Budget Terjangkau',
-            'Staycation di {keyword}: Fasilitas Lengkap & Harga Terbaru',
-            '{keyword} {lokasi}: Review Jujur, Foto & Tips Booking',
-            'Menginap di {keyword}: Worth It atau Tidak? Review Lengkap',
-            '{keyword}: Pilihan Hotel Terbaik untuk Liburan Keluarga',
-            'Pengalaman Menginap di {keyword} - Kelebihan & Kekurangan',
-            '{keyword} [TAHUN]: Harga, Fasilitas & Cara Booking Termurah',
-            'Review Lengkap {keyword}: Apakah Sesuai Ekspektasi?',
-            '{keyword}: Hotel Instagramable di {lokasi} yang Wajib Dicoba',
+            '{keyword} Review Hotel dan Harga Terbaru',
+            'Menginap di {keyword} Pengalaman Lengkap',
+            '{keyword} Penginapan Terbaik Harga Terjangkau',
+            'Staycation {keyword} Fasilitas dan Tips Booking',
+            '{keyword} Hotel Rekomendasi Liburan Keluarga',
+            'Review {keyword} Kelebihan dan Kekurangan',
+            '{keyword} Penginapan Instagramable yang Nyaman',
+            'Pengalaman Menginap {keyword} Worth It',
+            '{keyword} Hotel Murah Fasilitas Lengkap',
+            'Liburan di {keyword} Review Jujur',
+            '{keyword} Rekomendasi Hotel Terbaik Tahun Ini',
+            'Booking {keyword} Tips Dapat Harga Murah',
         ),
         'aktivitas' => array(
-            '{keyword} di {lokasi}: Panduan Lengkap untuk Pemula',
-            'Serunya {keyword} - Aktivitas Wajib Saat Liburan di {lokasi}',
-            '{keyword}: Pengalaman Seru yang Tak Terlupakan di {lokasi}',
-            'Mencoba {keyword} di {lokasi} - Tips, Biaya & Persiapan',
-            '{keyword} Terbaik di {lokasi} [TAHUN] - Review & Rekomendasi',
-            'Petualangan {keyword}: Aktivitas Outdoor Paling Seru di {lokasi}',
-            '{keyword} di {lokasi}: Semua yang Perlu Anda Ketahui',
-            'Pengalaman {keyword} di {lokasi} - Apakah Worth It?',
-            '{keyword}: Aktivitas Liburan Seru untuk Keluarga di {lokasi}',
-            'Guide Lengkap {keyword} di {lokasi} - Dari A sampai Z',
+            '{keyword} Aktivitas Seru Saat Liburan',
+            'Mencoba {keyword} Pengalaman Tak Terlupakan',
+            '{keyword} Panduan Lengkap untuk Pemula',
+            'Serunya {keyword} Aktivitas Wajib Dicoba',
+            '{keyword} Petualangan Outdoor Paling Seru',
+            'Pengalaman {keyword} Tips dan Persiapan',
+            '{keyword} Aktivitas Liburan Keluarga Terbaik',
+            'Guide {keyword} dari Awal Sampai Akhir',
+            '{keyword} Rekomendasi Aktivitas Wisata Populer',
+            'Menikmati {keyword} Pengalaman Seru Bersama',
+            '{keyword} Aktivitas Hits yang Viral',
+            'Persiapan {keyword} Panduan Lengkap Wisatawan',
         ),
         'umum' => array(
-            '{keyword} [TAHUN]: Panduan Wisata Super Lengkap',
-            'Menjelajahi {keyword} - Semua yang Perlu Anda Tahu',
-            '{keyword}: Destinasi Impian yang Wajib Dikunjungi',
-            'Liburan ke {keyword} - Tips, Biaya & Itinerary Lengkap',
-            '{keyword} Review [TAHUN]: Pengalaman Nyata & Rekomendasi',
-            'Pesona {keyword} yang Memikat Hati - Panduan Lengkap',
-            '{keyword}: Tempat Wisata Favorit yang Tak Pernah Sepi',
-            'Eksplorasi {keyword} - Hidden Gem yang Wajib Dikunjungi',
-            '{keyword} Terbaru [TAHUN]: Update Info & Tips Berkunjung',
-            'Keajaiban {keyword}: Mengapa Tempat Ini Begitu Spesial?',
+            '{keyword} Panduan Wisata Lengkap Terbaru',
+            'Menjelajahi {keyword} Semua yang Perlu Diketahui',
+            '{keyword} Destinasi Impian Wajib Dikunjungi',
+            'Liburan ke {keyword} Tips dan Itinerary',
+            '{keyword} Review Pengalaman Nyata Wisatawan',
+            'Pesona {keyword} yang Memikat Hati',
+            '{keyword} Tempat Favorit Wisatawan Indonesia',
+            'Eksplorasi {keyword} Hidden Gem Menakjubkan',
+            '{keyword} Info Terbaru dan Tips Berkunjung',
+            'Keindahan {keyword} yang Harus Dilihat',
+            '{keyword} Rekomendasi Wisata Terpopuler',
+            'Mengunjungi {keyword} Panduan Praktis Lengkap',
         ),
     );
 
     /**
-     * Click-bait prefixes for extra engagement
+     * SEO power words to enhance titles
      *
      * @var array
      */
-    private $clickbait_prefixes = array(
-        '[REVIEW JUJUR]',
-        '[UPDATE TERBARU]',
-        '[WAJIB BACA]',
-        '[VIRAL]',
-        '[RAHASIA]',
-        '[TIPS HEMAT]',
-        '[REKOMENDASI]',
-        '[PENGALAMAN PRIBADI]',
-    );
-
-    /**
-     * Number modifiers for listicles
-     *
-     * @var array
-     */
-    private $number_modifiers = array(
-        '5 Alasan Mengapa',
-        '7 Hal yang Harus Anda Tahu Tentang',
-        '10 Fakta Menarik Tentang',
-        '15 Tips Berkunjung ke',
-        '20 Spot Foto Terbaik di',
-        '3 Kesalahan yang Harus Dihindari Saat Mengunjungi',
-        '8 Aktivitas Seru di',
-        '12 Kuliner Wajib Coba di',
+    private $power_words = array(
+        'Lengkap', 'Terbaru', 'Terbaik', 'Wajib', 'Populer',
+        'Favorit', 'Hits', 'Viral', 'Rekomendasi', 'Panduan',
+        'Tips', 'Review', 'Pengalaman', 'Seru', 'Menakjubkan',
     );
 
     /**
@@ -140,10 +138,12 @@ class Title_Suggester {
      * @param string $type        Content type (destinasi, kuliner, hotel, aktivitas, umum)
      * @param int    $count       Number of suggestions to generate
      * @param bool   $use_ai      Whether to use AI for generation
-     * @return array Array of title suggestions
+     * @return array Array of title suggestions with metadata
      */
     public function suggest( $keyword, $location = '', $type = 'umum', $count = 10, $use_ai = false ) {
-        $suggestions = array();
+        // Clean keyword
+        $keyword = $this->clean_keyword( $keyword );
+        $location = $this->clean_keyword( $location );
 
         // Determine content type if not specified
         if ( $type === 'auto' || empty( $type ) ) {
@@ -154,14 +154,33 @@ class Title_Suggester {
         if ( $use_ai && $this->is_ai_available() ) {
             $ai_suggestions = $this->generate_with_ai( $keyword, $location, $type, $count );
             if ( ! empty( $ai_suggestions ) ) {
-                return $ai_suggestions;
+                return $this->format_suggestions( $ai_suggestions, $keyword, $type );
             }
         }
 
         // Fallback to template-based generation
         $suggestions = $this->generate_from_templates( $keyword, $location, $type, $count );
 
-        return $suggestions;
+        return $this->format_suggestions( $suggestions, $keyword, $type );
+    }
+
+    /**
+     * Clean keyword - remove unwanted characters
+     *
+     * @param string $keyword Keyword to clean
+     * @return string
+     */
+    private function clean_keyword( $keyword ) {
+        // Remove symbols
+        $keyword = preg_replace( '/[:\-&|"\']+/', ' ', $keyword );
+        // Remove extra spaces
+        $keyword = preg_replace( '/\s+/', ' ', $keyword );
+        // Trim
+        $keyword = trim( $keyword );
+        // Capitalize first letter of each word
+        $keyword = ucwords( strtolower( $keyword ) );
+
+        return $keyword;
     }
 
     /**
@@ -174,7 +193,7 @@ class Title_Suggester {
         $keyword_lower = strtolower( $keyword );
 
         // Kuliner keywords
-        $kuliner_keywords = array( 'makanan', 'kuliner', 'restoran', 'cafe', 'kafe', 'warung', 'rumah makan', 'nasi', 'mie', 'sate', 'bakso', 'soto', 'rendang', 'gudeg', 'seafood', 'minuman', 'kopi', 'es', 'jajanan' );
+        $kuliner_keywords = array( 'makanan', 'kuliner', 'restoran', 'cafe', 'kafe', 'warung', 'rumah makan', 'nasi', 'mie', 'sate', 'bakso', 'soto', 'rendang', 'gudeg', 'seafood', 'minuman', 'kopi', 'es', 'jajanan', 'masakan', 'hidangan' );
         foreach ( $kuliner_keywords as $kw ) {
             if ( strpos( $keyword_lower, $kw ) !== false ) {
                 return 'kuliner';
@@ -182,7 +201,7 @@ class Title_Suggester {
         }
 
         // Hotel keywords
-        $hotel_keywords = array( 'hotel', 'resort', 'villa', 'penginapan', 'homestay', 'hostel', 'guest house', 'cottage', 'glamping', 'menginap' );
+        $hotel_keywords = array( 'hotel', 'resort', 'villa', 'penginapan', 'homestay', 'hostel', 'guest house', 'cottage', 'glamping', 'menginap', 'akomodasi' );
         foreach ( $hotel_keywords as $kw ) {
             if ( strpos( $keyword_lower, $kw ) !== false ) {
                 return 'hotel';
@@ -190,7 +209,7 @@ class Title_Suggester {
         }
 
         // Aktivitas keywords
-        $aktivitas_keywords = array( 'rafting', 'diving', 'snorkeling', 'hiking', 'trekking', 'camping', 'surfing', 'paragliding', 'bungee', 'arung jeram', 'panjat tebing', 'flying fox', 'outbound' );
+        $aktivitas_keywords = array( 'rafting', 'diving', 'snorkeling', 'hiking', 'trekking', 'camping', 'surfing', 'paragliding', 'bungee', 'arung jeram', 'panjat tebing', 'flying fox', 'outbound', 'tour', 'tur' );
         foreach ( $aktivitas_keywords as $kw ) {
             if ( strpos( $keyword_lower, $kw ) !== false ) {
                 return 'aktivitas';
@@ -198,7 +217,7 @@ class Title_Suggester {
         }
 
         // Destinasi keywords (default for tourism)
-        $destinasi_keywords = array( 'pantai', 'gunung', 'danau', 'air terjun', 'taman', 'museum', 'candi', 'pura', 'masjid', 'gereja', 'kebun', 'hutan', 'goa', 'pulau', 'desa wisata', 'kampung', 'kolam renang', 'waterpark', 'theme park' );
+        $destinasi_keywords = array( 'pantai', 'gunung', 'danau', 'air terjun', 'taman', 'museum', 'candi', 'pura', 'masjid', 'gereja', 'kebun', 'hutan', 'goa', 'pulau', 'desa wisata', 'kampung', 'kolam renang', 'waterpark', 'theme park', 'wisata', 'tempat' );
         foreach ( $destinasi_keywords as $kw ) {
             if ( strpos( $keyword_lower, $kw ) !== false ) {
                 return 'destinasi';
@@ -214,17 +233,7 @@ class Title_Suggester {
      * @return bool
      */
     private function is_ai_available() {
-        // Check for OpenAI API key
-        if ( ! empty( $this->settings['openai_api_key'] ) ) {
-            return true;
-        }
-
-        // Check for other AI providers
-        if ( ! empty( $this->settings['deepseek_api_key'] ) ) {
-            return true;
-        }
-
-        return false;
+        return ! empty( $this->settings['openai_api_key'] );
     }
 
     /**
@@ -239,14 +248,8 @@ class Title_Suggester {
     private function generate_with_ai( $keyword, $location, $type, $count ) {
         $prompt = $this->build_ai_prompt( $keyword, $location, $type, $count );
 
-        // Try OpenAI first
         if ( ! empty( $this->settings['openai_api_key'] ) ) {
             return $this->call_openai( $prompt );
-        }
-
-        // Try DeepSeek
-        if ( ! empty( $this->settings['deepseek_api_key'] ) ) {
-            return $this->call_deepseek( $prompt );
         }
 
         return array();
@@ -262,46 +265,47 @@ class Title_Suggester {
      * @return string
      */
     private function build_ai_prompt( $keyword, $location, $type, $count ) {
-        $type_descriptions = array(
-            'destinasi' => 'tempat wisata/destinasi',
-            'kuliner' => 'kuliner/makanan/restoran',
+        $type_indo = array(
+            'destinasi' => 'tempat wisata',
+            'kuliner' => 'kuliner/makanan',
             'hotel' => 'hotel/penginapan',
-            'aktivitas' => 'aktivitas wisata/petualangan',
-            'umum' => 'wisata umum',
+            'aktivitas' => 'aktivitas wisata',
+            'umum' => 'wisata',
         );
 
-        $type_desc = $type_descriptions[ $type ] ?? 'wisata';
         $location_text = ! empty( $location ) ? " di {$location}" : '';
-        $year = date( 'Y' );
 
-        return "Kamu adalah seorang ahli SEO dan copywriter untuk website wisata Indonesia.
+        $prompt = "Kamu adalah ahli SEO Indonesia. Buatkan {$count} judul artikel SEO untuk keyword \"{$keyword}\"{$location_text}.
 
-Buatkan {$count} variasi judul artikel yang menarik, SEO-friendly, dan click-worthy untuk keyword: \"{$keyword}\"{$location_text}.
+ATURAN WAJIB:
+1. Maksimal 8 kata per judul
+2. DILARANG menggunakan simbol apapun (: - & | / \\ \" ')
+3. Bahasa Indonesia natural dan mudah dibaca
+4. Fokus pada search intent user
+5. Gunakan power words: Lengkap, Terbaru, Terbaik, Wajib, Panduan, Tips, Review
+6. Keyword utama harus ada di judul
+7. Judul harus menarik untuk diklik
 
-Kategori konten: {$type_desc}
+Tipe konten: {$type_indo[$type]}
 
-Kriteria judul yang baik:
-1. Mengandung keyword utama di awal judul
-2. Memiliki angka atau tahun ({$year}) jika relevan
-3. Memicu rasa penasaran pembaca
-4. Panjang ideal 50-60 karakter
-5. Menggunakan power words seperti: Lengkap, Terbaru, Rahasia, Wajib, Terbaik, dll.
-6. Variasikan format: listicle, how-to, review, panduan
+Format output: Satu judul per baris, tanpa nomor atau bullet.";
 
-Format output: Berikan hanya daftar judul, satu per baris, tanpa nomor atau bullet.";
+        return $prompt;
     }
 
     /**
      * Call OpenAI API
      *
-     * @param string $prompt Prompt text
+     * @param string $prompt Prompt to send
      * @return array
      */
     private function call_openai( $prompt ) {
         $api_key = $this->settings['openai_api_key'];
+        $endpoint = $this->settings['openai_endpoint'] ?? 'https://api.openai.com/v1/chat/completions';
         $model = $this->settings['openai_model'] ?? 'gpt-3.5-turbo';
 
-        $response = wp_remote_post( 'https://api.openai.com/v1/chat/completions', array(
+        $response = wp_remote_post( $endpoint, array(
+            'timeout' => 30,
             'headers' => array(
                 'Authorization' => 'Bearer ' . $api_key,
                 'Content-Type' => 'application/json',
@@ -312,88 +316,39 @@ Format output: Berikan hanya daftar judul, satu per baris, tanpa nomor atau bull
                     array( 'role' => 'user', 'content' => $prompt ),
                 ),
                 'temperature' => 0.8,
-                'max_tokens' => 1000,
+                'max_tokens' => 500,
             ) ),
-            'timeout' => 30,
         ) );
 
         if ( is_wp_error( $response ) ) {
-            tsa_log( 'OpenAI API error: ' . $response->get_error_message(), 'error' );
             return array();
         }
 
         $body = json_decode( wp_remote_retrieve_body( $response ), true );
 
-        if ( isset( $body['choices'][0]['message']['content'] ) ) {
-            $content = $body['choices'][0]['message']['content'];
-            return $this->parse_ai_response( $content );
-        }
-
-        return array();
-    }
-
-    /**
-     * Call DeepSeek API
-     *
-     * @param string $prompt Prompt text
-     * @return array
-     */
-    private function call_deepseek( $prompt ) {
-        $api_key = $this->settings['deepseek_api_key'];
-
-        $response = wp_remote_post( 'https://api.deepseek.com/v1/chat/completions', array(
-            'headers' => array(
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type' => 'application/json',
-            ),
-            'body' => wp_json_encode( array(
-                'model' => 'deepseek-chat',
-                'messages' => array(
-                    array( 'role' => 'user', 'content' => $prompt ),
-                ),
-                'temperature' => 0.8,
-                'max_tokens' => 1000,
-            ) ),
-            'timeout' => 30,
-        ) );
-
-        if ( is_wp_error( $response ) ) {
-            tsa_log( 'DeepSeek API error: ' . $response->get_error_message(), 'error' );
+        if ( empty( $body['choices'][0]['message']['content'] ) ) {
             return array();
         }
 
-        $body = json_decode( wp_remote_retrieve_body( $response ), true );
-
-        if ( isset( $body['choices'][0]['message']['content'] ) ) {
-            $content = $body['choices'][0]['message']['content'];
-            return $this->parse_ai_response( $content );
-        }
-
-        return array();
-    }
-
-    /**
-     * Parse AI response into array of titles
-     *
-     * @param string $content AI response content
-     * @return array
-     */
-    private function parse_ai_response( $content ) {
-        $lines = explode( "\n", trim( $content ) );
+        $content = $body['choices'][0]['message']['content'];
+        $lines = explode( "\n", $content );
         $titles = array();
 
         foreach ( $lines as $line ) {
             $line = trim( $line );
             // Remove numbering if present
             $line = preg_replace( '/^\d+[\.\)]\s*/', '', $line );
-            $line = preg_replace( '/^[-*]\s*/', '', $line );
+            // Remove symbols
+            $line = preg_replace( '/[:\-&|"\']+/', ' ', $line );
+            $line = preg_replace( '/\s+/', ' ', $line );
+            $line = trim( $line );
 
-            if ( ! empty( $line ) && strlen( $line ) > 10 ) {
+            if ( ! empty( $line ) && str_word_count( $line ) <= 10 ) {
                 $titles[] = $line;
             }
         }
 
-        return $titles;
+        return array_slice( $titles, 0, 12 );
     }
 
     /**
@@ -406,153 +361,197 @@ Format output: Berikan hanya daftar judul, satu per baris, tanpa nomor atau bull
      * @return array
      */
     private function generate_from_templates( $keyword, $location, $type, $count ) {
+        $templates = $this->templates[ $type ] ?? $this->templates['umum'];
         $suggestions = array();
-        $year = date( 'Y' );
 
-        // Get templates for the content type
-        $type_templates = $this->templates[ $type ] ?? $this->templates['umum'];
+        // Shuffle templates for variety
+        shuffle( $templates );
 
-        // Also include some general templates
-        $all_templates = array_merge( $type_templates, $this->templates['umum'] );
-        $all_templates = array_unique( $all_templates );
-
-        // Shuffle for variety
-        shuffle( $all_templates );
-
-        // Generate from templates
-        foreach ( $all_templates as $template ) {
+        foreach ( $templates as $template ) {
             if ( count( $suggestions ) >= $count ) {
                 break;
             }
 
-            $title = str_replace(
-                array( '{keyword}', '{lokasi}', '[TAHUN]' ),
-                array( $keyword, $location ?: 'Indonesia', $year ),
-                $template
-            );
+            $title = str_replace( '{keyword}', $keyword, $template );
 
-            // Clean up if location is empty
-            if ( empty( $location ) ) {
-                $title = str_replace( ' di Indonesia', '', $title );
-                $title = str_replace( ' Indonesia', '', $title );
+            if ( ! empty( $location ) ) {
+                $title = str_replace( '{lokasi}', $location, $title );
+            } else {
+                // Remove location placeholder if no location provided
+                $title = str_replace( ' di {lokasi}', '', $title );
+                $title = str_replace( ' {lokasi}', '', $title );
+                $title = str_replace( '{lokasi}', '', $title );
             }
 
-            $suggestions[] = $title;
-        }
+            // Clean up any remaining placeholders
+            $title = preg_replace( '/\{[^}]+\}/', '', $title );
+            $title = preg_replace( '/\s+/', ' ', $title );
+            $title = trim( $title );
 
-        // Add some listicle variations
-        if ( count( $suggestions ) < $count ) {
-            shuffle( $this->number_modifiers );
-            foreach ( $this->number_modifiers as $modifier ) {
-                if ( count( $suggestions ) >= $count ) {
-                    break;
-                }
-                $title = $modifier . ' ' . $keyword;
-                if ( ! empty( $location ) ) {
-                    $title .= ' ' . $location;
-                }
+            // Ensure max 8 words
+            $words = explode( ' ', $title );
+            if ( count( $words ) > 8 ) {
+                $title = implode( ' ', array_slice( $words, 0, 8 ) );
+            }
+
+            if ( ! empty( $title ) && ! in_array( $title, $suggestions ) ) {
                 $suggestions[] = $title;
             }
         }
 
-        // Add some clickbait variations
+        // Add variations if needed
         if ( count( $suggestions ) < $count ) {
-            shuffle( $this->clickbait_prefixes );
-            foreach ( $this->clickbait_prefixes as $prefix ) {
-                if ( count( $suggestions ) >= $count ) {
-                    break;
-                }
-                $base_title = $suggestions[ array_rand( array_slice( $suggestions, 0, 5 ) ) ] ?? $keyword;
-                $suggestions[] = $prefix . ' ' . $base_title;
-            }
+            $variations = $this->generate_variations( $keyword, $location, $count - count( $suggestions ) );
+            $suggestions = array_merge( $suggestions, $variations );
         }
 
         return array_slice( $suggestions, 0, $count );
     }
 
     /**
-     * Get related keywords for a topic
+     * Generate title variations
      *
-     * @param string $keyword Main keyword
-     * @return array Related keywords
+     * @param string $keyword  Main keyword
+     * @param string $location Location
+     * @param int    $count    Number of variations
+     * @return array
      */
-    public function get_related_keywords( $keyword ) {
-        $related = array();
-        $keyword_lower = strtolower( $keyword );
+    private function generate_variations( $keyword, $location, $count ) {
+        $variations = array();
+        $year = date( 'Y' );
 
-        // Common travel-related suffixes
-        $suffixes = array(
-            'harga tiket',
-            'jam buka',
-            'lokasi',
-            'review',
-            'tips berkunjung',
-            'rute',
-            'fasilitas',
-            'spot foto',
-            'penginapan terdekat',
-            'kuliner terdekat',
+        $patterns = array(
+            "{$keyword} Panduan Lengkap {$year}",
+            "{$keyword} Info Terbaru dan Terlengkap",
+            "Wisata {$keyword} yang Wajib Dikunjungi",
+            "{$keyword} Review dan Rekomendasi Terbaik",
+            "Mengunjungi {$keyword} Tips Lengkap",
+            "{$keyword} Destinasi Populer Tahun Ini",
+            "Liburan di {$keyword} Panduan Wisatawan",
+            "{$keyword} Tempat Hits yang Viral",
         );
 
-        foreach ( $suffixes as $suffix ) {
-            $related[] = $keyword . ' ' . $suffix;
+        if ( ! empty( $location ) ) {
+            $patterns[] = "{$keyword} {$location} Panduan Lengkap";
+            $patterns[] = "Wisata {$keyword} di {$location}";
         }
 
-        return $related;
+        shuffle( $patterns );
+
+        foreach ( $patterns as $pattern ) {
+            if ( count( $variations ) >= $count ) {
+                break;
+            }
+
+            // Ensure max 8 words
+            $words = explode( ' ', $pattern );
+            if ( count( $words ) <= 8 ) {
+                $variations[] = $pattern;
+            }
+        }
+
+        return $variations;
     }
 
     /**
-     * Validate title for SEO
+     * Format suggestions with metadata
      *
-     * @param string $title Title to validate
-     * @return array Validation result with score and suggestions
+     * @param array  $suggestions Raw suggestions
+     * @param string $keyword     Original keyword
+     * @param string $type        Content type
+     * @return array
      */
-    public function validate_title( $title ) {
-        $result = array(
-            'score' => 100,
-            'issues' => array(),
-            'suggestions' => array(),
-        );
+    private function format_suggestions( $suggestions, $keyword, $type ) {
+        $formatted = array();
 
-        $length = mb_strlen( $title );
+        foreach ( $suggestions as $index => $title ) {
+            $word_count = str_word_count( $title );
+            $char_count = strlen( $title );
 
-        // Check length
-        if ( $length < 30 ) {
-            $result['score'] -= 20;
-            $result['issues'][] = 'Judul terlalu pendek (kurang dari 30 karakter)';
-            $result['suggestions'][] = 'Tambahkan kata kunci atau deskripsi tambahan';
-        } elseif ( $length > 60 ) {
-            $result['score'] -= 10;
-            $result['issues'][] = 'Judul terlalu panjang (lebih dari 60 karakter)';
-            $result['suggestions'][] = 'Persingkat judul agar tidak terpotong di hasil pencarian';
+            // Calculate SEO score
+            $seo_score = $this->calculate_seo_score( $title, $keyword );
+
+            $formatted[] = array(
+                'title' => $title,
+                'word_count' => $word_count,
+                'char_count' => $char_count,
+                'seo_score' => $seo_score,
+                'type' => $type,
+                'has_keyword' => stripos( $title, $keyword ) !== false,
+                'index' => $index + 1,
+            );
         }
 
-        // Check for numbers
-        if ( ! preg_match( '/\d/', $title ) ) {
-            $result['score'] -= 5;
-            $result['suggestions'][] = 'Pertimbangkan menambahkan angka atau tahun untuk meningkatkan CTR';
+        // Sort by SEO score
+        usort( $formatted, function( $a, $b ) {
+            return $b['seo_score'] - $a['seo_score'];
+        } );
+
+        return $formatted;
+    }
+
+    /**
+     * Calculate SEO score for a title
+     *
+     * @param string $title   Title to score
+     * @param string $keyword Target keyword
+     * @return int Score 0-100
+     */
+    private function calculate_seo_score( $title, $keyword ) {
+        $score = 50; // Base score
+
+        // Keyword presence (+20)
+        if ( stripos( $title, $keyword ) !== false ) {
+            $score += 20;
         }
 
-        // Check for power words
-        $power_words = array( 'lengkap', 'terbaru', 'terbaik', 'rahasia', 'wajib', 'gratis', 'mudah', 'cepat', 'murah', 'review', 'panduan', 'tips' );
-        $has_power_word = false;
-        foreach ( $power_words as $word ) {
+        // Keyword at beginning (+10)
+        if ( stripos( $title, $keyword ) === 0 ) {
+            $score += 10;
+        }
+
+        // Optimal length 5-7 words (+10)
+        $word_count = str_word_count( $title );
+        if ( $word_count >= 5 && $word_count <= 7 ) {
+            $score += 10;
+        }
+
+        // Contains power words (+5 each, max +15)
+        $power_bonus = 0;
+        foreach ( $this->power_words as $word ) {
             if ( stripos( $title, $word ) !== false ) {
-                $has_power_word = true;
-                break;
+                $power_bonus += 5;
             }
         }
-        if ( ! $has_power_word ) {
-            $result['score'] -= 5;
-            $result['suggestions'][] = 'Tambahkan power word seperti: Lengkap, Terbaru, Terbaik, dll.';
+        $score += min( $power_bonus, 15 );
+
+        // No symbols (+5)
+        if ( ! preg_match( '/[:\-&|"\']+/', $title ) ) {
+            $score += 5;
         }
 
-        // Check for special characters that might cause issues
-        if ( preg_match( '/[<>"\']/', $title ) ) {
-            $result['score'] -= 10;
-            $result['issues'][] = 'Judul mengandung karakter khusus yang tidak disarankan';
+        // Character length 40-60 (+5)
+        $char_count = strlen( $title );
+        if ( $char_count >= 40 && $char_count <= 60 ) {
+            $score += 5;
         }
 
-        return $result;
+        return min( $score, 100 );
+    }
+
+    /**
+     * Get content type options
+     *
+     * @return array
+     */
+    public function get_type_options() {
+        return array(
+            'auto' => 'Auto Detect',
+            'destinasi' => 'Destinasi Wisata',
+            'kuliner' => 'Kuliner',
+            'hotel' => 'Hotel/Penginapan',
+            'aktivitas' => 'Aktivitas',
+            'umum' => 'Umum',
+        );
     }
 }

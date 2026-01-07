@@ -1,18 +1,16 @@
 <?php
 /**
- * Research Agent - Web Scraper and SERP Research
+ * Research Agent V2 - Enhanced Web Scraper and SERP Research
  *
  * This agent is responsible for:
  * - Searching for relevant sources based on the input title
- * - Scraping content from top sources (respecting robots.txt)
- * - Extracting key facts, points, and information
- * - Building a Research Pack for the next agent
- *
- * @link       https://example.com
- * @since      1.0.0
+ * - Scraping content from top 5+ sources
+ * - Extracting comprehensive data: facts, prices, hours, location, tips
+ * - Building a rich Research Pack for the Writer Agent
  *
  * @package    TravelSEO_Autopublisher
  * @subpackage TravelSEO_Autopublisher/includes/agents
+ * @version    2.0.0
  */
 
 namespace TravelSEO_Autopublisher\Agents;
@@ -27,109 +25,184 @@ use function TravelSEO_Autopublisher\tsa_get_keyword_variations;
 use function TravelSEO_Autopublisher\tsa_generate_faq_questions;
 
 /**
- * Research Agent Class
+ * Research Agent Class V2
  */
 class Research_Agent {
 
     /**
      * Job ID
-     *
-     * @var int
      */
     private $job_id;
 
     /**
      * Job title/topic
-     *
-     * @var string
      */
     private $title;
 
     /**
      * Job settings
-     *
-     * @var array
      */
     private $settings;
 
     /**
      * Research results
-     *
-     * @var array
      */
     private $research_pack;
 
     /**
+     * Minimum sources to scrape
+     */
+    const MIN_SOURCES = 5;
+
+    /**
      * Constructor
-     *
-     * @param int $job_id Job ID
-     * @param string $title Job title
-     * @param array $settings Job settings
      */
     public function __construct( $job_id, $title, $settings = array() ) {
         $this->job_id = $job_id;
         $this->title = $title;
         $this->settings = $settings;
+        $this->init_research_pack();
+    }
+
+    /**
+     * Initialize research pack structure
+     */
+    private function init_research_pack() {
         $this->research_pack = array(
-            'title' => $title,
+            'title' => $this->title,
+            'content_type' => $this->detect_content_type(),
             'sources' => array(),
-            'facts' => array(),
-            'keywords' => array(),
-            'faq_questions' => array(),
-            'location_info' => array(),
-            'pricing_info' => array(),
-            'hours_info' => array(),
+            'scraped_content' => array(),
+            
+            // Core information
+            'overview' => '',
+            'history' => '',
+            'unique_points' => array(),
+            
+            // Practical info
+            'location' => array(
+                'address' => '',
+                'coordinates' => '',
+                'landmarks' => array(),
+                'city' => '',
+                'province' => '',
+            ),
+            'pricing' => array(
+                'ticket_adult' => '',
+                'ticket_child' => '',
+                'ticket_foreign' => '',
+                'parking_motor' => '',
+                'parking_car' => '',
+                'other_fees' => array(),
+                'notes' => '',
+            ),
+            'hours' => array(
+                'weekday' => '',
+                'weekend' => '',
+                'holiday' => '',
+                'notes' => '',
+            ),
+            'facilities' => array(),
+            
+            // Experience info
+            'activities' => array(),
+            'photo_spots' => array(),
             'tips' => array(),
-            'nearby_places' => array(),
+            'warnings' => array(),
+            
+            // Related info
+            'nearby_food' => array(),
+            'nearby_hotels' => array(),
+            'nearby_attractions' => array(),
+            
+            // SEO data
+            'keywords' => array(),
+            'lsi_keywords' => array(),
+            'faq_questions' => array(),
+            'search_intent' => '',
+            
+            // Meta
             'created_at' => current_time( 'mysql' ),
+            'source_count' => 0,
+            'data_quality_score' => 0,
         );
     }
 
     /**
+     * Detect content type from title
+     */
+    private function detect_content_type() {
+        $title_lower = strtolower( $this->title );
+        
+        $types = array(
+            'kuliner' => array( 'makanan', 'kuliner', 'restoran', 'cafe', 'kafe', 'warung', 'nasi', 'mie', 'sate', 'bakso', 'soto' ),
+            'hotel' => array( 'hotel', 'resort', 'villa', 'penginapan', 'homestay', 'hostel', 'cottage', 'glamping' ),
+            'aktivitas' => array( 'rafting', 'diving', 'snorkeling', 'hiking', 'trekking', 'camping', 'surfing', 'tour' ),
+            'destinasi' => array( 'pantai', 'gunung', 'danau', 'air terjun', 'taman', 'museum', 'candi', 'pura', 'wisata', 'kolam renang', 'waterpark' ),
+        );
+        
+        foreach ( $types as $type => $keywords ) {
+            foreach ( $keywords as $keyword ) {
+                if ( strpos( $title_lower, $keyword ) !== false ) {
+                    return $type;
+                }
+            }
+        }
+        
+        return 'umum';
+    }
+
+    /**
      * Run the research process
-     *
-     * @return array Research pack
      */
     public function run() {
-        tsa_log_job( $this->job_id, 'Research Agent: Starting research for "' . $this->title . '"' );
-        
-        // Update job status
+        tsa_log_job( $this->job_id, 'Research Agent V2: Memulai riset untuk "' . $this->title . '"' );
         tsa_update_job( $this->job_id, array( 'status' => 'researching' ) );
 
-        // Step 1: Search for sources
+        // Step 1: Search for sources (minimum 5)
+        tsa_log_job( $this->job_id, 'Research Agent: Mencari sumber referensi...' );
         $sources = $this->search_sources();
         
         // Step 2: Scrape each source
+        tsa_log_job( $this->job_id, 'Research Agent: Scraping ' . count( $sources ) . ' sumber...' );
         foreach ( $sources as $source ) {
             $scraped = $this->scrape_source( $source );
             if ( $scraped ) {
-                $this->research_pack['sources'][] = $scraped;
+                $this->research_pack['sources'][] = $source;
+                $this->research_pack['scraped_content'][] = $scraped;
             }
         }
 
-        // Step 3: Generate keyword variations
+        // Step 3: Extract and consolidate data
+        tsa_log_job( $this->job_id, 'Research Agent: Mengekstrak data penting...' );
+        $this->extract_practical_info();
+        $this->extract_experience_info();
+        $this->extract_related_info();
+
+        // Step 4: Generate SEO data
+        tsa_log_job( $this->job_id, 'Research Agent: Generating SEO data...' );
         $this->research_pack['keywords'] = tsa_get_keyword_variations( $this->title );
-        
-        // Step 4: Generate FAQ questions
-        $this->research_pack['faq_questions'] = tsa_generate_faq_questions( $this->title );
+        $this->research_pack['lsi_keywords'] = $this->generate_lsi_keywords();
+        $this->research_pack['faq_questions'] = $this->generate_comprehensive_faq();
+        $this->research_pack['search_intent'] = $this->analyze_search_intent();
 
-        // Step 5: Consolidate facts from all sources
-        $this->consolidate_facts();
-
-        // Step 6: If API is available, enhance with AI
+        // Step 5: Enhance with AI if available
         if ( $this->has_ai_api() ) {
+            tsa_log_job( $this->job_id, 'Research Agent: Enhancing dengan AI...' );
             $this->enhance_with_ai();
         }
 
-        tsa_log_job( $this->job_id, 'Research Agent: Completed. Found ' . count( $this->research_pack['sources'] ) . ' sources.' );
+        // Step 6: Calculate data quality score
+        $this->research_pack['source_count'] = count( $this->research_pack['sources'] );
+        $this->research_pack['data_quality_score'] = $this->calculate_quality_score();
+
+        tsa_log_job( $this->job_id, 'Research Agent: Selesai. ' . $this->research_pack['source_count'] . ' sumber, Quality Score: ' . $this->research_pack['data_quality_score'] . '%' );
 
         return $this->research_pack;
     }
 
     /**
      * Search for relevant sources
-     *
-     * @return array List of source URLs
      */
     private function search_sources() {
         $sources = array();
@@ -138,557 +211,665 @@ class Research_Agent {
         $serp_api_key = tsa_get_option( 'serp_api_key', '' );
         
         if ( ! empty( $serp_api_key ) ) {
-            // Use SERP API
             $sources = $this->search_with_serp_api( $serp_api_key );
         } else {
-            // Fallback: Use free search methods
             $sources = $this->search_free();
         }
 
-        tsa_log_job( $this->job_id, 'Research Agent: Found ' . count( $sources ) . ' potential sources.' );
+        // Ensure minimum sources
+        if ( count( $sources ) < self::MIN_SOURCES ) {
+            $fallback = $this->get_fallback_sources();
+            $sources = array_merge( $sources, $fallback );
+        }
 
-        return array_slice( $sources, 0, 5 ); // Limit to top 5
+        // Remove duplicates and limit
+        $sources = $this->deduplicate_sources( $sources );
+        
+        return array_slice( $sources, 0, 8 ); // Get up to 8 sources
     }
 
     /**
-     * Search using SERP API (optional)
-     *
-     * @param string $api_key SERP API key
-     * @return array
+     * Search using SERP API
      */
     private function search_with_serp_api( $api_key ) {
         $sources = array();
+        $content_type = $this->research_pack['content_type'];
         
-        $query = urlencode( $this->title . ' wisata' );
-        $url = "https://serpapi.com/search.json?q={$query}&hl=id&gl=id&api_key={$api_key}";
-        
-        $response = wp_remote_get( $url, array(
-            'timeout' => 15,
-        ) );
-        
-        if ( is_wp_error( $response ) ) {
-            tsa_log_job( $this->job_id, 'Research Agent: SERP API error - ' . $response->get_error_message() );
-            return $this->search_free();
-        }
-        
-        $body = wp_remote_retrieve_body( $response );
-        $data = json_decode( $body, true );
-        
-        if ( isset( $data['organic_results'] ) ) {
-            foreach ( $data['organic_results'] as $result ) {
-                if ( isset( $result['link'] ) ) {
-                    $sources[] = array(
-                        'url' => $result['link'],
-                        'title' => isset( $result['title'] ) ? $result['title'] : '',
-                        'snippet' => isset( $result['snippet'] ) ? $result['snippet'] : '',
-                    );
-                }
-            }
-        }
-        
-        return $sources;
-    }
-
-    /**
-     * Search using free methods (no API required)
-     *
-     * @return array
-     */
-    private function search_free() {
-        $sources = array();
-        
-        // Predefined trusted sources for travel content
-        $trusted_domains = array(
-            'wikipedia.org',
-            'tripadvisor.co.id',
-            'traveloka.com',
-            'tiket.com',
-            'indonesia.travel',
-            'wonderful.co.id',
-            'detik.com/travel',
-            'kompas.com/travel',
-            'liputan6.com/lifestyle/travel',
+        // Build optimized search query
+        $search_queries = array(
+            $this->title . ' wisata',
+            $this->title . ' harga tiket jam buka',
+            $this->title . ' review pengalaman',
         );
         
-        // Build search URLs for Wikipedia (most reliable free source)
-        $wiki_query = urlencode( $this->title );
-        $wiki_url = "https://id.wikipedia.org/w/api.php?action=opensearch&search={$wiki_query}&limit=3&format=json";
-        
-        $response = wp_remote_get( $wiki_url, array(
-            'timeout' => 10,
-        ) );
-        
-        if ( ! is_wp_error( $response ) ) {
-            $body = wp_remote_retrieve_body( $response );
-            $data = json_decode( $body, true );
+        foreach ( $search_queries as $query ) {
+            $encoded_query = urlencode( $query );
+            $url = "https://serpapi.com/search.json?q={$encoded_query}&hl=id&gl=id&num=5&api_key={$api_key}";
             
-            if ( isset( $data[3] ) && is_array( $data[3] ) ) {
-                foreach ( $data[3] as $index => $url ) {
-                    $sources[] = array(
-                        'url' => $url,
-                        'title' => isset( $data[1][ $index ] ) ? $data[1][ $index ] : '',
-                        'snippet' => isset( $data[2][ $index ] ) ? $data[2][ $index ] : '',
-                    );
-                }
-            }
-        }
-
-        // Try to get results from DuckDuckGo Instant Answer API (free, no key required)
-        $ddg_query = urlencode( $this->title . ' wisata indonesia' );
-        $ddg_url = "https://api.duckduckgo.com/?q={$ddg_query}&format=json&no_html=1";
-        
-        $response = wp_remote_get( $ddg_url, array(
-            'timeout' => 10,
-        ) );
-        
-        if ( ! is_wp_error( $response ) ) {
-            $body = wp_remote_retrieve_body( $response );
-            $data = json_decode( $body, true );
+            $response = wp_remote_get( $url, array( 'timeout' => 15 ) );
             
-            // Get related topics
-            if ( isset( $data['RelatedTopics'] ) && is_array( $data['RelatedTopics'] ) ) {
-                foreach ( $data['RelatedTopics'] as $topic ) {
-                    if ( isset( $topic['FirstURL'] ) ) {
-                        $sources[] = array(
-                            'url' => $topic['FirstURL'],
-                            'title' => isset( $topic['Text'] ) ? $topic['Text'] : '',
-                            'snippet' => isset( $topic['Text'] ) ? $topic['Text'] : '',
-                        );
-                    }
-                }
-            }
-        }
-
-        // Add fallback sources based on topic
-        $fallback_sources = $this->get_fallback_sources();
-        $sources = array_merge( $sources, $fallback_sources );
-
-        return $sources;
-    }
-
-    /**
-     * Get fallback sources based on topic type
-     *
-     * @return array
-     */
-    private function get_fallback_sources() {
-        $sources = array();
-        
-        // Detect topic type
-        $title_lower = strtolower( $this->title );
-        
-        // Tourism/destination keywords
-        $tourism_keywords = array( 'wisata', 'pantai', 'gunung', 'air terjun', 'danau', 'taman', 'candi', 'museum' );
-        $culinary_keywords = array( 'kuliner', 'makanan', 'restoran', 'cafe', 'warung', 'masakan' );
-        
-        $is_tourism = false;
-        $is_culinary = false;
-        
-        foreach ( $tourism_keywords as $keyword ) {
-            if ( strpos( $title_lower, $keyword ) !== false ) {
-                $is_tourism = true;
-                break;
-            }
-        }
-        
-        foreach ( $culinary_keywords as $keyword ) {
-            if ( strpos( $title_lower, $keyword ) !== false ) {
-                $is_culinary = true;
-                break;
-            }
-        }
-        
-        // Add relevant fallback sources
-        if ( $is_tourism ) {
-            $sources[] = array(
-                'url' => 'https://indonesia.travel/id/id/home',
-                'title' => 'Wonderful Indonesia - Official Tourism Website',
-                'snippet' => 'Official tourism website of Indonesia',
-                'is_fallback' => true,
-            );
-        }
-        
-        if ( $is_culinary ) {
-            $sources[] = array(
-                'url' => 'https://id.wikipedia.org/wiki/Daftar_masakan_Indonesia',
-                'title' => 'Daftar Masakan Indonesia - Wikipedia',
-                'snippet' => 'Daftar lengkap masakan Indonesia',
-                'is_fallback' => true,
-            );
-        }
-        
-        return $sources;
-    }
-
-    /**
-     * Scrape content from a source
-     *
-     * @param array $source Source info
-     * @return array|false Scraped data or false on failure
-     */
-    private function scrape_source( $source ) {
-        $url = $source['url'];
-        
-        // Validate URL
-        $validated_url = tsa_validate_url( $url );
-        if ( ! $validated_url ) {
-            tsa_log_job( $this->job_id, 'Research Agent: Invalid URL skipped - ' . $url );
-            return false;
-        }
-        
-        // Check robots.txt
-        if ( ! tsa_check_robots_txt( $validated_url ) ) {
-            tsa_log_job( $this->job_id, 'Research Agent: Blocked by robots.txt - ' . $url );
-            return false;
-        }
-        
-        tsa_log_job( $this->job_id, 'Research Agent: Scraping - ' . $url );
-        
-        // Fetch the page
-        $response = wp_remote_get( $validated_url, array(
-            'timeout' => 15,
-            'user-agent' => 'Mozilla/5.0 (compatible; TravelSEO-Bot/1.0; +https://example.com/bot)',
-            'headers' => array(
-                'Accept' => 'text/html,application/xhtml+xml',
-                'Accept-Language' => 'id-ID,id;q=0.9,en;q=0.8',
-            ),
-        ) );
-        
-        if ( is_wp_error( $response ) ) {
-            tsa_log_job( $this->job_id, 'Research Agent: Failed to fetch - ' . $response->get_error_message() );
-            return false;
-        }
-        
-        $html = wp_remote_retrieve_body( $response );
-        
-        if ( empty( $html ) ) {
-            return false;
-        }
-        
-        // Parse the HTML
-        $scraped_data = $this->parse_html( $html, $validated_url );
-        $scraped_data['url'] = $validated_url;
-        $scraped_data['original_title'] = $source['title'];
-        $scraped_data['original_snippet'] = $source['snippet'];
-        
-        return $scraped_data;
-    }
-
-    /**
-     * Parse HTML content and extract relevant information
-     *
-     * @param string $html HTML content
-     * @param string $url Source URL
-     * @return array
-     */
-    private function parse_html( $html, $url ) {
-        $data = array(
-            'title' => '',
-            'content_summary' => '',
-            'headings' => array(),
-            'key_facts' => array(),
-            'images' => array(),
-            'location' => '',
-            'hours' => '',
-            'price' => '',
-            'tips' => array(),
-        );
-        
-        // Use DOMDocument to parse HTML
-        libxml_use_internal_errors( true );
-        $dom = new \DOMDocument();
-        $dom->loadHTML( mb_convert_encoding( $html, 'HTML-ENTITIES', 'UTF-8' ) );
-        libxml_clear_errors();
-        
-        $xpath = new \DOMXPath( $dom );
-        
-        // Extract title
-        $title_nodes = $xpath->query( '//title' );
-        if ( $title_nodes->length > 0 ) {
-            $data['title'] = trim( $title_nodes->item( 0 )->textContent );
-        }
-        
-        // Extract headings (H1, H2, H3)
-        $heading_nodes = $xpath->query( '//h1 | //h2 | //h3' );
-        foreach ( $heading_nodes as $node ) {
-            $heading_text = trim( $node->textContent );
-            if ( ! empty( $heading_text ) && strlen( $heading_text ) < 200 ) {
-                $data['headings'][] = $heading_text;
-            }
-        }
-        
-        // Extract main content paragraphs
-        $paragraph_nodes = $xpath->query( '//article//p | //main//p | //div[contains(@class, "content")]//p | //div[contains(@class, "entry")]//p' );
-        $content_parts = array();
-        
-        foreach ( $paragraph_nodes as $node ) {
-            $text = trim( $node->textContent );
-            if ( strlen( $text ) > 50 && strlen( $text ) < 1000 ) {
-                $content_parts[] = $text;
-            }
-        }
-        
-        // If no content found in article/main, try general paragraphs
-        if ( empty( $content_parts ) ) {
-            $paragraph_nodes = $xpath->query( '//p' );
-            foreach ( $paragraph_nodes as $node ) {
-                $text = trim( $node->textContent );
-                if ( strlen( $text ) > 50 && strlen( $text ) < 1000 ) {
-                    $content_parts[] = $text;
-                }
-            }
-        }
-        
-        // Limit to first 5 paragraphs for summary
-        $data['content_summary'] = implode( "\n\n", array_slice( $content_parts, 0, 5 ) );
-        
-        // Extract key facts using pattern matching
-        $data['key_facts'] = $this->extract_key_facts( $content_parts );
-        
-        // Extract location information
-        $data['location'] = $this->extract_location_info( $content_parts );
-        
-        // Extract hours information
-        $data['hours'] = $this->extract_hours_info( $content_parts );
-        
-        // Extract price information
-        $data['price'] = $this->extract_price_info( $content_parts );
-        
-        // Extract tips
-        $data['tips'] = $this->extract_tips( $content_parts );
-        
-        // Extract images (alt text for reference)
-        $img_nodes = $xpath->query( '//img[@alt]' );
-        foreach ( $img_nodes as $node ) {
-            $alt = $node->getAttribute( 'alt' );
-            if ( ! empty( $alt ) && strlen( $alt ) > 5 ) {
-                $data['images'][] = $alt;
-            }
-        }
-        
-        return $data;
-    }
-
-    /**
-     * Extract key facts from content
-     *
-     * @param array $paragraphs Content paragraphs
-     * @return array
-     */
-    private function extract_key_facts( $paragraphs ) {
-        $facts = array();
-        
-        $fact_patterns = array(
-            '/terletak di (.+?)(?:\.|,)/i',
-            '/didirikan pada (.+?)(?:\.|,)/i',
-            '/dibuka pada (.+?)(?:\.|,)/i',
-            '/memiliki luas (.+?)(?:\.|,)/i',
-            '/ketinggian (.+?)(?:\.|,)/i',
-            '/berjarak (.+?)(?:\.|,)/i',
-            '/dikenal sebagai (.+?)(?:\.|,)/i',
-            '/merupakan (.+?)(?:\.|,)/i',
-        );
-        
-        foreach ( $paragraphs as $paragraph ) {
-            foreach ( $fact_patterns as $pattern ) {
-                if ( preg_match( $pattern, $paragraph, $matches ) ) {
-                    $facts[] = trim( $matches[0] );
-                }
-            }
-        }
-        
-        return array_unique( array_slice( $facts, 0, 10 ) );
-    }
-
-    /**
-     * Extract location information
-     *
-     * @param array $paragraphs Content paragraphs
-     * @return string
-     */
-    private function extract_location_info( $paragraphs ) {
-        $location_patterns = array(
-            '/(?:terletak|berlokasi|berada) di (.+?)(?:\.|,)/i',
-            '/alamat[:\s]+(.+?)(?:\.|,)/i',
-            '/lokasi[:\s]+(.+?)(?:\.|,)/i',
-        );
-        
-        $full_text = implode( ' ', $paragraphs );
-        
-        foreach ( $location_patterns as $pattern ) {
-            if ( preg_match( $pattern, $full_text, $matches ) ) {
-                return trim( $matches[1] );
-            }
-        }
-        
-        return '';
-    }
-
-    /**
-     * Extract operating hours information
-     *
-     * @param array $paragraphs Content paragraphs
-     * @return string
-     */
-    private function extract_hours_info( $paragraphs ) {
-        $hours_patterns = array(
-            '/(?:jam buka|buka)[:\s]+(.+?)(?:\.|,|$)/i',
-            '/(?:jam operasional)[:\s]+(.+?)(?:\.|,|$)/i',
-            '/(\d{1,2}[:.]\d{2}\s*-\s*\d{1,2}[:.]\d{2})/i',
-            '/buka (?:dari )?(?:pukul )?(\d{1,2}[:.]\d{2}.+?)(?:\.|,|$)/i',
-        );
-        
-        $full_text = implode( ' ', $paragraphs );
-        
-        foreach ( $hours_patterns as $pattern ) {
-            if ( preg_match( $pattern, $full_text, $matches ) ) {
-                return trim( $matches[1] );
-            }
-        }
-        
-        return '';
-    }
-
-    /**
-     * Extract price information
-     *
-     * @param array $paragraphs Content paragraphs
-     * @return string
-     */
-    private function extract_price_info( $paragraphs ) {
-        $price_patterns = array(
-            '/(?:harga tiket|tiket masuk|htm)[:\s]+(?:Rp\.?\s*)?(\d[\d.,]+)/i',
-            '/(?:Rp\.?\s*)(\d[\d.,]+)(?:\s*per\s*orang)?/i',
-            '/(?:biaya masuk)[:\s]+(?:Rp\.?\s*)?(\d[\d.,]+)/i',
-        );
-        
-        $full_text = implode( ' ', $paragraphs );
-        
-        foreach ( $price_patterns as $pattern ) {
-            if ( preg_match( $pattern, $full_text, $matches ) ) {
-                return 'Rp ' . trim( $matches[1] );
-            }
-        }
-        
-        return '';
-    }
-
-    /**
-     * Extract tips from content
-     *
-     * @param array $paragraphs Content paragraphs
-     * @return array
-     */
-    private function extract_tips( $paragraphs ) {
-        $tips = array();
-        
-        $tip_keywords = array(
-            'tips', 'saran', 'disarankan', 'sebaiknya', 'jangan lupa', 'pastikan',
-            'perhatikan', 'hindari', 'waktu terbaik', 'rekomendasi'
-        );
-        
-        foreach ( $paragraphs as $paragraph ) {
-            foreach ( $tip_keywords as $keyword ) {
-                if ( stripos( $paragraph, $keyword ) !== false ) {
-                    // Extract sentence containing the tip
-                    $sentences = preg_split( '/(?<=[.!?])\s+/', $paragraph );
-                    foreach ( $sentences as $sentence ) {
-                        if ( stripos( $sentence, $keyword ) !== false && strlen( $sentence ) > 20 ) {
-                            $tips[] = trim( $sentence );
+            if ( ! is_wp_error( $response ) ) {
+                $body = wp_remote_retrieve_body( $response );
+                $data = json_decode( $body, true );
+                
+                if ( isset( $data['organic_results'] ) ) {
+                    foreach ( $data['organic_results'] as $result ) {
+                        if ( isset( $result['link'] ) ) {
+                            $sources[] = array(
+                                'url' => $result['link'],
+                                'title' => $result['title'] ?? '',
+                                'snippet' => $result['snippet'] ?? '',
+                                'position' => $result['position'] ?? 0,
+                            );
                         }
                     }
                 }
             }
         }
         
-        return array_unique( array_slice( $tips, 0, 5 ) );
+        return $sources;
     }
 
     /**
-     * Consolidate facts from all sources
+     * Search using free methods
      */
-    private function consolidate_facts() {
-        $all_facts = array();
-        $all_tips = array();
-        $locations = array();
-        $hours = array();
-        $prices = array();
+    private function search_free() {
+        $sources = array();
         
-        foreach ( $this->research_pack['sources'] as $source ) {
-            if ( isset( $source['key_facts'] ) ) {
-                $all_facts = array_merge( $all_facts, $source['key_facts'] );
-            }
-            if ( isset( $source['tips'] ) ) {
-                $all_tips = array_merge( $all_tips, $source['tips'] );
-            }
-            if ( ! empty( $source['location'] ) ) {
-                $locations[] = $source['location'];
-            }
-            if ( ! empty( $source['hours'] ) ) {
-                $hours[] = $source['hours'];
-            }
-            if ( ! empty( $source['price'] ) ) {
-                $prices[] = $source['price'];
+        // 1. Wikipedia Indonesia
+        $wiki_sources = $this->search_wikipedia();
+        $sources = array_merge( $sources, $wiki_sources );
+        
+        // 2. DuckDuckGo Instant Answer
+        $ddg_sources = $this->search_duckduckgo();
+        $sources = array_merge( $sources, $ddg_sources );
+        
+        // 3. Build direct URLs to trusted sources
+        $direct_sources = $this->build_direct_source_urls();
+        $sources = array_merge( $sources, $direct_sources );
+        
+        return $sources;
+    }
+
+    /**
+     * Search Wikipedia
+     */
+    private function search_wikipedia() {
+        $sources = array();
+        $wiki_query = urlencode( $this->title );
+        
+        // Search API
+        $search_url = "https://id.wikipedia.org/w/api.php?action=query&list=search&srsearch={$wiki_query}&format=json&srlimit=3";
+        
+        $response = wp_remote_get( $search_url, array( 'timeout' => 10 ) );
+        
+        if ( ! is_wp_error( $response ) ) {
+            $body = wp_remote_retrieve_body( $response );
+            $data = json_decode( $body, true );
+            
+            if ( isset( $data['query']['search'] ) ) {
+                foreach ( $data['query']['search'] as $result ) {
+                    $page_title = str_replace( ' ', '_', $result['title'] );
+                    $sources[] = array(
+                        'url' => "https://id.wikipedia.org/wiki/{$page_title}",
+                        'title' => $result['title'],
+                        'snippet' => strip_tags( $result['snippet'] ),
+                        'source_type' => 'wikipedia',
+                    );
+                }
             }
         }
         
-        $this->research_pack['facts'] = array_unique( $all_facts );
-        $this->research_pack['tips'] = array_unique( $all_tips );
+        return $sources;
+    }
+
+    /**
+     * Search DuckDuckGo
+     */
+    private function search_duckduckgo() {
+        $sources = array();
+        $ddg_query = urlencode( $this->title . ' wisata indonesia' );
+        $ddg_url = "https://api.duckduckgo.com/?q={$ddg_query}&format=json&no_html=1";
         
-        // Use most common/first found for location, hours, price
-        $this->research_pack['location_info'] = ! empty( $locations ) ? $locations[0] : '';
-        $this->research_pack['hours_info'] = ! empty( $hours ) ? $hours[0] : '';
-        $this->research_pack['pricing_info'] = ! empty( $prices ) ? $prices[0] : '';
+        $response = wp_remote_get( $ddg_url, array( 'timeout' => 10 ) );
         
-        // Extract keywords from all content
-        $all_content = '';
-        foreach ( $this->research_pack['sources'] as $source ) {
-            if ( isset( $source['content_summary'] ) ) {
-                $all_content .= ' ' . $source['content_summary'];
+        if ( ! is_wp_error( $response ) ) {
+            $body = wp_remote_retrieve_body( $response );
+            $data = json_decode( $body, true );
+            
+            // Abstract
+            if ( ! empty( $data['AbstractURL'] ) ) {
+                $sources[] = array(
+                    'url' => $data['AbstractURL'],
+                    'title' => $data['Heading'] ?? $this->title,
+                    'snippet' => $data['AbstractText'] ?? '',
+                    'source_type' => 'duckduckgo',
+                );
+            }
+            
+            // Related topics
+            if ( isset( $data['RelatedTopics'] ) && is_array( $data['RelatedTopics'] ) ) {
+                foreach ( array_slice( $data['RelatedTopics'], 0, 3 ) as $topic ) {
+                    if ( isset( $topic['FirstURL'] ) ) {
+                        $sources[] = array(
+                            'url' => $topic['FirstURL'],
+                            'title' => $topic['Text'] ?? '',
+                            'snippet' => $topic['Text'] ?? '',
+                            'source_type' => 'duckduckgo',
+                        );
+                    }
+                }
             }
         }
         
-        $extracted_keywords = tsa_extract_keywords( $all_content, 15 );
-        $this->research_pack['keywords'] = array_unique(
-            array_merge( $this->research_pack['keywords'], $extracted_keywords )
+        return $sources;
+    }
+
+    /**
+     * Build direct URLs to trusted sources
+     */
+    private function build_direct_source_urls() {
+        $sources = array();
+        $keyword = urlencode( $this->title );
+        
+        // Trusted Indonesian travel sources
+        $trusted_sources = array(
+            array(
+                'base' => 'https://www.tripadvisor.co.id/Search?q=',
+                'name' => 'TripAdvisor',
+            ),
+            array(
+                'base' => 'https://www.traveloka.com/id-id/activities/search?query=',
+                'name' => 'Traveloka',
+            ),
+            array(
+                'base' => 'https://www.tiket.com/to-do/search?q=',
+                'name' => 'Tiket.com',
+            ),
+        );
+        
+        foreach ( $trusted_sources as $source ) {
+            $sources[] = array(
+                'url' => $source['base'] . $keyword,
+                'title' => $source['name'] . ' - ' . $this->title,
+                'snippet' => '',
+                'source_type' => 'direct',
+            );
+        }
+        
+        return $sources;
+    }
+
+    /**
+     * Get fallback sources
+     */
+    private function get_fallback_sources() {
+        $sources = array();
+        $content_type = $this->research_pack['content_type'];
+        
+        // Generic fallback based on content type
+        $fallbacks = array(
+            'destinasi' => array(
+                array( 'url' => 'https://indonesia.travel/id/id/home', 'title' => 'Wonderful Indonesia' ),
+            ),
+            'kuliner' => array(
+                array( 'url' => 'https://id.wikipedia.org/wiki/Daftar_masakan_Indonesia', 'title' => 'Masakan Indonesia' ),
+            ),
+            'hotel' => array(
+                array( 'url' => 'https://www.booking.com', 'title' => 'Booking.com' ),
+            ),
+        );
+        
+        if ( isset( $fallbacks[ $content_type ] ) ) {
+            foreach ( $fallbacks[ $content_type ] as $fb ) {
+                $sources[] = array(
+                    'url' => $fb['url'],
+                    'title' => $fb['title'],
+                    'snippet' => '',
+                    'source_type' => 'fallback',
+                );
+            }
+        }
+        
+        return $sources;
+    }
+
+    /**
+     * Deduplicate sources by domain
+     */
+    private function deduplicate_sources( $sources ) {
+        $seen_domains = array();
+        $unique = array();
+        
+        foreach ( $sources as $source ) {
+            $domain = parse_url( $source['url'], PHP_URL_HOST );
+            if ( ! in_array( $domain, $seen_domains ) ) {
+                $seen_domains[] = $domain;
+                $unique[] = $source;
+            }
+        }
+        
+        return $unique;
+    }
+
+    /**
+     * Scrape a single source
+     */
+    private function scrape_source( $source ) {
+        $url = $source['url'];
+        
+        // Validate URL
+        if ( ! tsa_validate_url( $url ) ) {
+            return null;
+        }
+        
+        // Check robots.txt
+        if ( ! tsa_check_robots_txt( $url ) ) {
+            tsa_log_job( $this->job_id, 'Research Agent: Skipping (robots.txt) - ' . $url );
+            return null;
+        }
+        
+        // Fetch content
+        $response = wp_remote_get( $url, array(
+            'timeout' => 15,
+            'user-agent' => 'Mozilla/5.0 (compatible; TravelSEO Research Bot/2.0)',
+        ) );
+        
+        if ( is_wp_error( $response ) ) {
+            return null;
+        }
+        
+        $html = wp_remote_retrieve_body( $response );
+        
+        if ( empty( $html ) ) {
+            return null;
+        }
+        
+        // Parse and extract content
+        return $this->parse_html_content( $html, $url );
+    }
+
+    /**
+     * Parse HTML and extract relevant content
+     */
+    private function parse_html_content( $html, $url ) {
+        // Remove scripts, styles, and comments
+        $html = preg_replace( '/<script[^>]*>.*?<\/script>/is', '', $html );
+        $html = preg_replace( '/<style[^>]*>.*?<\/style>/is', '', $html );
+        $html = preg_replace( '/<!--.*?-->/s', '', $html );
+        
+        // Extract title
+        preg_match( '/<title[^>]*>(.*?)<\/title>/is', $html, $title_match );
+        $title = isset( $title_match[1] ) ? trim( strip_tags( $title_match[1] ) ) : '';
+        
+        // Extract meta description
+        preg_match( '/<meta[^>]*name=["\']description["\'][^>]*content=["\']([^"\']*)["\'][^>]*>/is', $html, $desc_match );
+        $meta_desc = isset( $desc_match[1] ) ? trim( $desc_match[1] ) : '';
+        
+        // Extract headings
+        preg_match_all( '/<h[1-3][^>]*>(.*?)<\/h[1-3]>/is', $html, $heading_matches );
+        $headings = array_map( 'strip_tags', $heading_matches[1] ?? array() );
+        
+        // Extract paragraphs
+        preg_match_all( '/<p[^>]*>(.*?)<\/p>/is', $html, $p_matches );
+        $paragraphs = array();
+        foreach ( $p_matches[1] ?? array() as $p ) {
+            $clean = trim( strip_tags( $p ) );
+            if ( strlen( $clean ) > 50 ) { // Only meaningful paragraphs
+                $paragraphs[] = $clean;
+            }
+        }
+        
+        // Extract lists
+        preg_match_all( '/<li[^>]*>(.*?)<\/li>/is', $html, $li_matches );
+        $list_items = array_map( function( $li ) {
+            return trim( strip_tags( $li ) );
+        }, $li_matches[1] ?? array() );
+        
+        // Extract tables (for pricing, hours, etc.)
+        $tables = $this->extract_tables( $html );
+        
+        // Combine all text for analysis
+        $all_text = implode( "\n", array_merge( array( $title, $meta_desc ), $headings, $paragraphs ) );
+        
+        return array(
+            'url' => $url,
+            'title' => $title,
+            'meta_description' => $meta_desc,
+            'headings' => array_slice( $headings, 0, 20 ),
+            'paragraphs' => array_slice( $paragraphs, 0, 30 ),
+            'list_items' => array_slice( $list_items, 0, 30 ),
+            'tables' => $tables,
+            'full_text' => substr( $all_text, 0, 10000 ), // Limit text size
+            'word_count' => str_word_count( $all_text ),
         );
     }
 
     /**
-     * Check if AI API is available
-     *
-     * @return bool
+     * Extract tables from HTML
      */
-    private function has_ai_api() {
-        $api_key = tsa_get_option( 'openai_api_key', '' );
-        return ! empty( $api_key );
+    private function extract_tables( $html ) {
+        $tables = array();
+        
+        preg_match_all( '/<table[^>]*>(.*?)<\/table>/is', $html, $table_matches );
+        
+        foreach ( $table_matches[1] ?? array() as $table_html ) {
+            $rows = array();
+            preg_match_all( '/<tr[^>]*>(.*?)<\/tr>/is', $table_html, $tr_matches );
+            
+            foreach ( $tr_matches[1] ?? array() as $tr ) {
+                preg_match_all( '/<t[dh][^>]*>(.*?)<\/t[dh]>/is', $tr, $td_matches );
+                $cells = array_map( function( $cell ) {
+                    return trim( strip_tags( $cell ) );
+                }, $td_matches[1] ?? array() );
+                
+                if ( ! empty( $cells ) ) {
+                    $rows[] = $cells;
+                }
+            }
+            
+            if ( ! empty( $rows ) ) {
+                $tables[] = $rows;
+            }
+        }
+        
+        return array_slice( $tables, 0, 5 );
     }
 
     /**
-     * Enhance research pack with AI
+     * Extract practical information from scraped content
+     */
+    private function extract_practical_info() {
+        $all_text = '';
+        foreach ( $this->research_pack['scraped_content'] as $content ) {
+            $all_text .= $content['full_text'] . "\n";
+        }
+        
+        // Extract address patterns
+        $address_patterns = array(
+            '/(?:alamat|lokasi|terletak di|berada di)[:\s]*([^\.]+)/i',
+            '/(?:jl\.|jalan)[^,\.]+(?:,\s*[^,\.]+)*/i',
+        );
+        
+        foreach ( $address_patterns as $pattern ) {
+            if ( preg_match( $pattern, $all_text, $match ) ) {
+                $this->research_pack['location']['address'] = trim( $match[1] ?? $match[0] );
+                break;
+            }
+        }
+        
+        // Extract pricing patterns
+        $price_patterns = array(
+            '/(?:harga tiket|htm|tiket masuk)[:\s]*(?:rp\.?\s*)?(\d+[\d\.,]*)/i',
+            '/(?:dewasa|adult)[:\s]*(?:rp\.?\s*)?(\d+[\d\.,]*)/i',
+            '/(?:anak|child)[:\s]*(?:rp\.?\s*)?(\d+[\d\.,]*)/i',
+        );
+        
+        foreach ( $price_patterns as $pattern ) {
+            if ( preg_match( $pattern, $all_text, $match ) ) {
+                $price = 'Rp ' . number_format( (int) preg_replace( '/[^\d]/', '', $match[1] ), 0, ',', '.' );
+                if ( stripos( $match[0], 'anak' ) !== false || stripos( $match[0], 'child' ) !== false ) {
+                    $this->research_pack['pricing']['ticket_child'] = $price;
+                } else {
+                    $this->research_pack['pricing']['ticket_adult'] = $price;
+                }
+            }
+        }
+        
+        // Extract hours patterns
+        $hours_patterns = array(
+            '/(?:jam buka|jam operasional|buka)[:\s]*(\d{1,2}[:.]\d{2})\s*[-–]\s*(\d{1,2}[:.]\d{2})/i',
+            '/(?:senin|selasa|rabu|kamis|jumat|sabtu|minggu)[:\s]*(\d{1,2}[:.]\d{2})\s*[-–]\s*(\d{1,2}[:.]\d{2})/i',
+        );
+        
+        foreach ( $hours_patterns as $pattern ) {
+            if ( preg_match( $pattern, $all_text, $match ) ) {
+                $this->research_pack['hours']['weekday'] = $match[1] . ' - ' . $match[2];
+                break;
+            }
+        }
+        
+        // Extract facilities
+        $facility_keywords = array(
+            'toilet', 'mushola', 'masjid', 'parkir', 'warung', 'restoran', 'cafe',
+            'wifi', 'gazebo', 'playground', 'kolam renang', 'toko suvenir', 'atm',
+        );
+        
+        foreach ( $facility_keywords as $facility ) {
+            if ( stripos( $all_text, $facility ) !== false ) {
+                $this->research_pack['facilities'][] = ucfirst( $facility );
+            }
+        }
+        
+        $this->research_pack['facilities'] = array_unique( $this->research_pack['facilities'] );
+    }
+
+    /**
+     * Extract experience information
+     */
+    private function extract_experience_info() {
+        $all_text = '';
+        $all_lists = array();
+        
+        foreach ( $this->research_pack['scraped_content'] as $content ) {
+            $all_text .= $content['full_text'] . "\n";
+            $all_lists = array_merge( $all_lists, $content['list_items'] ?? array() );
+        }
+        
+        // Extract activities
+        $activity_keywords = array(
+            'berenang', 'snorkeling', 'diving', 'foto', 'selfie', 'piknik',
+            'camping', 'hiking', 'trekking', 'bermain', 'bersantai', 'menikmati',
+            'melihat', 'mengunjungi', 'berkeliling', 'menjelajahi',
+        );
+        
+        foreach ( $all_lists as $item ) {
+            foreach ( $activity_keywords as $keyword ) {
+                if ( stripos( $item, $keyword ) !== false && strlen( $item ) > 10 && strlen( $item ) < 200 ) {
+                    $this->research_pack['activities'][] = $item;
+                    break;
+                }
+            }
+        }
+        
+        $this->research_pack['activities'] = array_unique( array_slice( $this->research_pack['activities'], 0, 10 ) );
+        
+        // Extract tips
+        $tip_patterns = array(
+            '/(?:tips?|saran|disarankan|sebaiknya)[:\s]*([^\.]+\.)/i',
+            '/(?:jangan lupa|pastikan|perhatikan)[:\s]*([^\.]+\.)/i',
+        );
+        
+        foreach ( $tip_patterns as $pattern ) {
+            preg_match_all( $pattern, $all_text, $matches );
+            if ( ! empty( $matches[1] ) ) {
+                foreach ( $matches[1] as $tip ) {
+                    $tip = trim( $tip );
+                    if ( strlen( $tip ) > 20 && strlen( $tip ) < 300 ) {
+                        $this->research_pack['tips'][] = $tip;
+                    }
+                }
+            }
+        }
+        
+        $this->research_pack['tips'] = array_unique( array_slice( $this->research_pack['tips'], 0, 10 ) );
+    }
+
+    /**
+     * Extract related information
+     */
+    private function extract_related_info() {
+        $all_text = '';
+        foreach ( $this->research_pack['scraped_content'] as $content ) {
+            $all_text .= $content['full_text'] . "\n";
+        }
+        
+        // Extract nearby food mentions
+        $food_patterns = array(
+            '/(?:kuliner|makanan|warung|restoran|cafe)[^\.]*(?:terdekat|sekitar|dekat)[^\.]*\./i',
+            '/(?:mencicipi|menikmati|mencoba)[^\.]*(?:kuliner|makanan|masakan)[^\.]*\./i',
+        );
+        
+        foreach ( $food_patterns as $pattern ) {
+            preg_match_all( $pattern, $all_text, $matches );
+            if ( ! empty( $matches[0] ) ) {
+                foreach ( $matches[0] as $food ) {
+                    $this->research_pack['nearby_food'][] = trim( $food );
+                }
+            }
+        }
+        
+        $this->research_pack['nearby_food'] = array_unique( array_slice( $this->research_pack['nearby_food'], 0, 5 ) );
+    }
+
+    /**
+     * Generate LSI keywords
+     */
+    private function generate_lsi_keywords() {
+        $lsi = array();
+        $title_words = explode( ' ', strtolower( $this->title ) );
+        
+        // Common LSI patterns for travel content
+        $lsi_templates = array(
+            '{keyword} terdekat',
+            '{keyword} terbaru',
+            'harga tiket {keyword}',
+            'jam buka {keyword}',
+            'rute ke {keyword}',
+            'hotel dekat {keyword}',
+            'kuliner {keyword}',
+            'tips berkunjung {keyword}',
+            'review {keyword}',
+            'pengalaman {keyword}',
+        );
+        
+        foreach ( $lsi_templates as $template ) {
+            $lsi[] = str_replace( '{keyword}', $this->title, $template );
+        }
+        
+        return $lsi;
+    }
+
+    /**
+     * Generate comprehensive FAQ questions
+     */
+    private function generate_comprehensive_faq() {
+        $faqs = array();
+        $keyword = $this->title;
+        $type = $this->research_pack['content_type'];
+        
+        // Universal FAQs
+        $universal = array(
+            "Apa itu {$keyword}?",
+            "Dimana lokasi {$keyword}?",
+            "Berapa harga tiket masuk {$keyword}?",
+            "Jam berapa {$keyword} buka?",
+            "Apa saja fasilitas di {$keyword}?",
+            "Bagaimana cara menuju {$keyword}?",
+            "Kapan waktu terbaik mengunjungi {$keyword}?",
+            "Apakah {$keyword} cocok untuk anak-anak?",
+        );
+        
+        $faqs = array_merge( $faqs, $universal );
+        
+        // Type-specific FAQs
+        $type_faqs = array(
+            'destinasi' => array(
+                "Apa saja aktivitas yang bisa dilakukan di {$keyword}?",
+                "Apakah ada penginapan dekat {$keyword}?",
+                "Berapa lama waktu yang dibutuhkan untuk mengunjungi {$keyword}?",
+            ),
+            'kuliner' => array(
+                "Apa menu andalan di {$keyword}?",
+                "Berapa kisaran harga makanan di {$keyword}?",
+                "Apakah {$keyword} menyediakan delivery?",
+            ),
+            'hotel' => array(
+                "Berapa harga kamar di {$keyword}?",
+                "Apa saja fasilitas kamar di {$keyword}?",
+                "Apakah {$keyword} menyediakan sarapan?",
+            ),
+        );
+        
+        if ( isset( $type_faqs[ $type ] ) ) {
+            $faqs = array_merge( $faqs, $type_faqs[ $type ] );
+        }
+        
+        return array_slice( $faqs, 0, 10 );
+    }
+
+    /**
+     * Analyze search intent
+     */
+    private function analyze_search_intent() {
+        $title_lower = strtolower( $this->title );
+        
+        // Informational intent keywords
+        $info_keywords = array( 'apa', 'siapa', 'mengapa', 'bagaimana', 'sejarah', 'asal' );
+        foreach ( $info_keywords as $kw ) {
+            if ( strpos( $title_lower, $kw ) !== false ) {
+                return 'informational';
+            }
+        }
+        
+        // Transactional intent keywords
+        $trans_keywords = array( 'beli', 'booking', 'pesan', 'harga', 'tiket', 'promo' );
+        foreach ( $trans_keywords as $kw ) {
+            if ( strpos( $title_lower, $kw ) !== false ) {
+                return 'transactional';
+            }
+        }
+        
+        // Navigational intent (specific place names)
+        return 'navigational';
+    }
+
+    /**
+     * Check if AI API is available
+     */
+    private function has_ai_api() {
+        return ! empty( tsa_get_option( 'openai_api_key', '' ) );
+    }
+
+    /**
+     * Enhance research with AI
      */
     private function enhance_with_ai() {
         $api_key = tsa_get_option( 'openai_api_key', '' );
-        $api_endpoint = tsa_get_option( 'openai_endpoint', 'https://api.openai.com/v1/chat/completions' );
-        $model = tsa_get_option( 'openai_model', 'gpt-3.5-turbo' );
-        
         if ( empty( $api_key ) ) {
             return;
         }
         
-        tsa_log_job( $this->job_id, 'Research Agent: Enhancing with AI...' );
-        
-        // Prepare content summary for AI
-        $content_for_ai = "Topik: " . $this->title . "\n\n";
-        $content_for_ai .= "Fakta yang ditemukan:\n";
-        foreach ( $this->research_pack['facts'] as $fact ) {
-            $content_for_ai .= "- " . $fact . "\n";
+        // Build context from scraped content
+        $context = '';
+        foreach ( $this->research_pack['scraped_content'] as $content ) {
+            $context .= substr( $content['full_text'], 0, 2000 ) . "\n\n";
         }
+        $context = substr( $context, 0, 8000 );
         
-        $prompt = "Berdasarkan informasi berikut tentang destinasi wisata, buatlah ringkasan terstruktur dalam format JSON dengan field: summary (ringkasan 2-3 kalimat), highlights (array 5 poin menarik), best_time (waktu terbaik berkunjung), target_audience (siapa yang cocok berkunjung). Gunakan Bahasa Indonesia.\n\n" . $content_for_ai;
+        $prompt = "Berdasarkan informasi berikut tentang \"{$this->title}\", ekstrak dan rangkum data penting dalam format JSON:
+
+INFORMASI:
+{$context}
+
+Ekstrak dalam format JSON:
+{
+    \"overview\": \"Deskripsi singkat 2-3 kalimat\",
+    \"unique_points\": [\"Poin unik 1\", \"Poin unik 2\", \"Poin unik 3\"],
+    \"address\": \"Alamat lengkap jika ditemukan\",
+    \"ticket_price\": \"Harga tiket jika ditemukan\",
+    \"opening_hours\": \"Jam buka jika ditemukan\",
+    \"best_activities\": [\"Aktivitas 1\", \"Aktivitas 2\"],
+    \"insider_tips\": [\"Tips 1\", \"Tips 2\"]
+}
+
+Jika informasi tidak ditemukan, isi dengan string kosong atau array kosong.";
+
+        $endpoint = tsa_get_option( 'openai_endpoint', 'https://api.openai.com/v1/chat/completions' );
+        $model = tsa_get_option( 'openai_model', 'gpt-3.5-turbo' );
         
-        $response = wp_remote_post( $api_endpoint, array(
-            'timeout' => 30,
+        $response = wp_remote_post( $endpoint, array(
+            'timeout' => 60,
             'headers' => array(
                 'Authorization' => 'Bearer ' . $api_key,
                 'Content-Type' => 'application/json',
@@ -696,16 +877,9 @@ class Research_Agent {
             'body' => wp_json_encode( array(
                 'model' => $model,
                 'messages' => array(
-                    array(
-                        'role' => 'system',
-                        'content' => 'Kamu adalah asisten peneliti wisata yang ahli dalam menganalisis dan meringkas informasi destinasi wisata Indonesia.',
-                    ),
-                    array(
-                        'role' => 'user',
-                        'content' => $prompt,
-                    ),
+                    array( 'role' => 'user', 'content' => $prompt ),
                 ),
-                'temperature' => 0.7,
+                'temperature' => 0.3,
                 'max_tokens' => 1000,
             ) ),
         ) );
@@ -715,30 +889,94 @@ class Research_Agent {
             return;
         }
         
-        $body = wp_remote_retrieve_body( $response );
-        $data = json_decode( $body, true );
+        $body = json_decode( wp_remote_retrieve_body( $response ), true );
         
-        if ( isset( $data['choices'][0]['message']['content'] ) ) {
-            $ai_response = $data['choices'][0]['message']['content'];
+        if ( ! empty( $body['choices'][0]['message']['content'] ) ) {
+            $content = $body['choices'][0]['message']['content'];
             
             // Try to parse JSON from response
-            if ( preg_match( '/\{[\s\S]*\}/', $ai_response, $matches ) ) {
-                $ai_data = json_decode( $matches[0], true );
+            preg_match( '/\{[^{}]*\}/s', $content, $json_match );
+            if ( ! empty( $json_match[0] ) ) {
+                $ai_data = json_decode( $json_match[0], true );
+                
                 if ( $ai_data ) {
-                    $this->research_pack['ai_enhanced'] = $ai_data;
+                    // Merge AI data with existing data
+                    if ( ! empty( $ai_data['overview'] ) ) {
+                        $this->research_pack['overview'] = $ai_data['overview'];
+                    }
+                    if ( ! empty( $ai_data['unique_points'] ) ) {
+                        $this->research_pack['unique_points'] = array_merge(
+                            $this->research_pack['unique_points'],
+                            $ai_data['unique_points']
+                        );
+                    }
+                    if ( ! empty( $ai_data['address'] ) && empty( $this->research_pack['location']['address'] ) ) {
+                        $this->research_pack['location']['address'] = $ai_data['address'];
+                    }
+                    if ( ! empty( $ai_data['insider_tips'] ) ) {
+                        $this->research_pack['tips'] = array_merge(
+                            $this->research_pack['tips'],
+                            $ai_data['insider_tips']
+                        );
+                    }
+                    
+                    tsa_log_job( $this->job_id, 'Research Agent: AI enhancement successful' );
                 }
             }
         }
-        
-        tsa_log_job( $this->job_id, 'Research Agent: AI enhancement completed.' );
     }
 
     /**
-     * Get the research pack
-     *
-     * @return array
+     * Calculate data quality score
      */
-    public function get_research_pack() {
-        return $this->research_pack;
+    private function calculate_quality_score() {
+        $score = 0;
+        $max_score = 100;
+        
+        // Source count (max 20 points)
+        $source_count = count( $this->research_pack['sources'] );
+        $score += min( $source_count * 4, 20 );
+        
+        // Has address (10 points)
+        if ( ! empty( $this->research_pack['location']['address'] ) ) {
+            $score += 10;
+        }
+        
+        // Has pricing (10 points)
+        if ( ! empty( $this->research_pack['pricing']['ticket_adult'] ) ) {
+            $score += 10;
+        }
+        
+        // Has hours (10 points)
+        if ( ! empty( $this->research_pack['hours']['weekday'] ) ) {
+            $score += 10;
+        }
+        
+        // Has facilities (10 points)
+        if ( count( $this->research_pack['facilities'] ) >= 3 ) {
+            $score += 10;
+        }
+        
+        // Has activities (10 points)
+        if ( count( $this->research_pack['activities'] ) >= 3 ) {
+            $score += 10;
+        }
+        
+        // Has tips (10 points)
+        if ( count( $this->research_pack['tips'] ) >= 3 ) {
+            $score += 10;
+        }
+        
+        // Has overview (10 points)
+        if ( ! empty( $this->research_pack['overview'] ) ) {
+            $score += 10;
+        }
+        
+        // Has FAQs (10 points)
+        if ( count( $this->research_pack['faq_questions'] ) >= 5 ) {
+            $score += 10;
+        }
+        
+        return min( $score, $max_score );
     }
 }

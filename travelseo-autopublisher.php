@@ -3,7 +3,7 @@
  * Plugin Name:       TravelSEO Autopublisher
  * Plugin URI:        https://example.com/plugins/the-basics/
  * Description:       Automate SEO content creation for travel blogs with a multi-agent pipeline, from research to publishing.
- * Version:           1.3.0
+ * Version:           1.4.0
  * Requires at least: 5.2
  * Requires PHP:      7.4
  * Author:            Your Name
@@ -22,7 +22,7 @@ if ( ! defined( 'WPINC' ) ) {
 /**
  * Define constants
  */
-define( 'TSA_VERSION', '1.3.0' );
+define( 'TSA_VERSION', '1.4.0' );
 define( 'TSA_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'TSA_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 

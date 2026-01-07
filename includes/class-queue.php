@@ -1,71 +1,51 @@
 <?php
 /**
- * Queue Manager - Background Processing
+ * Queue Manager V3 - Background Processing dengan Flow Modern
  *
- * Handles job queue processing using Action Scheduler (preferred)
- * or WP Cron as fallback.
- *
- * @link       https://example.com
- * @since      1.0.0
+ * Flow Baru:
+ * 1. Research (scrape 5-8 sumber)
+ * 2. Summarize (rangkum data jadi 1 dokumen)
+ * 3. Write (tulis artikel dari rangkuman)
+ * 4. QA (spinning + quality check)
+ * 5. Images (suggest gambar)
+ * 6. Ready
  *
  * @package    TravelSEO_Autopublisher
  * @subpackage TravelSEO_Autopublisher/includes
+ * @version    3.0.0
  */
 
 namespace TravelSEO_Autopublisher;
 
-/**
- * Queue Manager Class
- */
 class Queue {
 
-    /**
-     * Initialize queue hooks
-     */
     public static function init() {
-        // Action Scheduler hooks
         add_action( 'tsa_process_job', array( __CLASS__, 'process_job' ), 10, 1 );
-        
-        // WP Cron fallback hooks
         add_action( 'tsa_process_job_cron', array( __CLASS__, 'process_job' ), 10, 1 );
-        
-        // Batch processing hook
         add_action( 'tsa_process_batch', array( __CLASS__, 'process_batch' ) );
         
-        // Schedule batch processor if not already scheduled
         if ( ! wp_next_scheduled( 'tsa_process_batch' ) ) {
             wp_schedule_event( time(), 'every_minute', 'tsa_process_batch' );
         }
         
-        // Add custom cron interval
         add_filter( 'cron_schedules', array( __CLASS__, 'add_cron_interval' ) );
     }
 
-    /**
-     * Add custom cron interval
-     *
-     * @param array $schedules Existing schedules
-     * @return array
-     */
     public static function add_cron_interval( $schedules ) {
         $schedules['every_minute'] = array(
             'interval' => 60,
             'display' => __( 'Every Minute', 'travelseo-autopublisher' ),
         );
+        $schedules['every_30_seconds'] = array(
+            'interval' => 30,
+            'display' => __( 'Every 30 Seconds', 'travelseo-autopublisher' ),
+        );
         return $schedules;
     }
 
-    /**
-     * Schedule a job for processing
-     *
-     * @param int $job_id Job ID
-     * @param int $delay Delay in seconds (default: 0)
-     * @return bool
-     */
     public static function schedule_job( $job_id, $delay = 0 ) {
         $timestamp = time() + $delay;
         
-        // Prefer Action Scheduler if available
         if ( function_exists( 'as_schedule_single_action' ) ) {
             as_schedule_single_action( 
                 $timestamp, 
@@ -76,18 +56,15 @@ class Queue {
             return true;
         }
         
-        // Fallback to WP Cron
         wp_schedule_single_event( $timestamp, 'tsa_process_job_cron', array( $job_id ) );
         return true;
     }
 
-    /**
-     * Process a single job
-     *
-     * @param int $job_id Job ID
-     */
     public static function process_job( $job_id ) {
         global $wpdb;
+        
+        // Increase time limit for long processes
+        @set_time_limit( 300 );
         
         $table_jobs = $wpdb->prefix . 'tsa_jobs';
         $job = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table_jobs WHERE id = %d", $job_id ) );
@@ -103,104 +80,221 @@ class Queue {
         }
         
         // Load dependencies
-        require_once TSA_PLUGIN_DIR . 'includes/helpers.php';
-        require_once TSA_PLUGIN_DIR . 'includes/agents/class-research-agent.php';
-        require_once TSA_PLUGIN_DIR . 'includes/agents/class-writer-agent.php';
-        require_once TSA_PLUGIN_DIR . 'includes/agents/class-qa-agent.php';
-        require_once TSA_PLUGIN_DIR . 'includes/agents/class-image-agent.php';
+        self::load_dependencies();
         
         $settings = json_decode( $job->settings, true ) ?: array();
         $research_pack = json_decode( $job->research_pack, true ) ?: array();
         $draft_pack = json_decode( $job->draft_pack, true ) ?: array();
         
         try {
-            // Determine which stage to run based on current status
             switch ( $job->status ) {
                 case 'queued':
-                    // Stage 1: Research
-                    $agent = new Agents\Research_Agent( $job_id, $job->title_input, $settings );
-                    $research_pack = $agent->run();
-                    
-                    $wpdb->update( $table_jobs, array(
-                        'status' => 'researching',
-                        'research_pack' => wp_json_encode( $research_pack ),
-                    ), array( 'id' => $job_id ) );
-                    
-                    // Schedule next stage
-                    self::schedule_job( $job_id, 1 );
+                    self::stage_research( $job_id, $job->title_input, $settings, $table_jobs );
                     break;
                     
                 case 'researching':
-                    // Stage 2: Writing
-                    $agent = new Agents\Writer_Agent( $job_id, $research_pack, $settings );
-                    $draft_pack = $agent->run();
-                    
-                    $wpdb->update( $table_jobs, array(
-                        'status' => 'drafting',
-                        'draft_pack' => wp_json_encode( $draft_pack ),
-                    ), array( 'id' => $job_id ) );
-                    
-                    // Schedule next stage
-                    self::schedule_job( $job_id, 1 );
+                    // Re-fetch research_pack
+                    $job = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table_jobs WHERE id = %d", $job_id ) );
+                    $research_pack = json_decode( $job->research_pack, true ) ?: array();
+                    self::stage_summarize( $job_id, $research_pack, $settings, $table_jobs );
                     break;
                     
-                case 'drafting':
-                    // Stage 3: QA
-                    $agent = new Agents\QA_Agent( $job_id, $draft_pack, $research_pack );
-                    $draft_pack = $agent->run();
+                case 'summarizing':
+                    // Re-fetch research_pack with summary
+                    $job = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table_jobs WHERE id = %d", $job_id ) );
+                    $research_pack = json_decode( $job->research_pack, true ) ?: array();
+                    self::stage_write( $job_id, $research_pack, $settings, $table_jobs );
+                    break;
                     
-                    $wpdb->update( $table_jobs, array(
-                        'status' => 'qa',
-                        'draft_pack' => wp_json_encode( $draft_pack ),
-                    ), array( 'id' => $job_id ) );
-                    
-                    // Schedule next stage
-                    self::schedule_job( $job_id, 1 );
+                case 'writing':
+                    // Re-fetch draft_pack
+                    $job = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table_jobs WHERE id = %d", $job_id ) );
+                    $draft_pack = json_decode( $job->draft_pack, true ) ?: array();
+                    self::stage_qa( $job_id, $draft_pack, $settings, $table_jobs );
                     break;
                     
                 case 'qa':
-                    // Stage 4: Image Planning
-                    $agent = new Agents\Image_Agent( $job_id, $draft_pack );
-                    $draft_pack = $agent->run();
+                    // Re-fetch draft_pack
+                    $job = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table_jobs WHERE id = %d", $job_id ) );
+                    $draft_pack = json_decode( $job->draft_pack, true ) ?: array();
+                    self::stage_images( $job_id, $draft_pack, $table_jobs );
+                    break;
                     
-                    $wpdb->update( $table_jobs, array(
-                        'status' => 'ready',
-                        'draft_pack' => wp_json_encode( $draft_pack ),
-                    ), array( 'id' => $job_id ) );
-                    
+                case 'images':
+                    // Mark as ready
+                    $wpdb->update( $table_jobs, array( 'status' => 'ready' ), array( 'id' => $job_id ) );
                     tsa_log_job( $job_id, 'Job completed successfully. Ready for publishing.' );
                     break;
             }
             
         } catch ( \Exception $e ) {
-            // Mark as failed
-            $wpdb->update( $table_jobs, array(
-                'status' => 'failed',
-            ), array( 'id' => $job_id ) );
-            
+            $wpdb->update( $table_jobs, array( 'status' => 'failed' ), array( 'id' => $job_id ) );
             tsa_log_job( $job_id, 'Error: ' . $e->getMessage() );
             error_log( "TravelSEO: Job #{$job_id} failed - " . $e->getMessage() );
         }
     }
 
     /**
-     * Process batch of queued jobs
-     * This runs periodically to pick up any jobs that weren't scheduled
+     * Stage 1: Research - Scrape 5-8 sumber
      */
+    private static function stage_research( $job_id, $title, $settings, $table_jobs ) {
+        global $wpdb;
+        
+        tsa_log_job( $job_id, 'Stage 1/5: Research - Memulai scraping sumber...' );
+        
+        $agent = new Agents\Research_Agent( $job_id, $title, $settings );
+        $research_pack = $agent->run();
+        
+        // Validate research pack
+        if ( empty( $research_pack ) || empty( $research_pack['sources'] ) ) {
+            // Create minimal research pack if scraping failed
+            $research_pack = array(
+                'title' => $title,
+                'keyword' => $title,
+                'sources' => array(),
+                'scraped_content' => array(),
+                'facts' => array(),
+                'status' => 'minimal',
+            );
+            tsa_log_job( $job_id, 'Research: Menggunakan data minimal karena scraping gagal.' );
+        }
+        
+        $wpdb->update( $table_jobs, array(
+            'status' => 'researching',
+            'research_pack' => wp_json_encode( $research_pack ),
+        ), array( 'id' => $job_id ) );
+        
+        tsa_log_job( $job_id, 'Research selesai. Melanjutkan ke Summarize...' );
+        self::schedule_job( $job_id, 2 );
+    }
+
+    /**
+     * Stage 2: Summarize - Rangkum semua data jadi 1 dokumen
+     */
+    private static function stage_summarize( $job_id, $research_pack, $settings, $table_jobs ) {
+        global $wpdb;
+        
+        tsa_log_job( $job_id, 'Stage 2/5: Summarize - Merangkum data research...' );
+        
+        $agent = new Agents\Summarizer_Agent( $job_id, $research_pack, $settings );
+        $research_pack = $agent->run();
+        
+        $wpdb->update( $table_jobs, array(
+            'status' => 'summarizing',
+            'research_pack' => wp_json_encode( $research_pack ),
+        ), array( 'id' => $job_id ) );
+        
+        tsa_log_job( $job_id, 'Summarize selesai. Melanjutkan ke Writing...' );
+        self::schedule_job( $job_id, 2 );
+    }
+
+    /**
+     * Stage 3: Write - Tulis artikel dari rangkuman
+     */
+    private static function stage_write( $job_id, $research_pack, $settings, $table_jobs ) {
+        global $wpdb;
+        
+        tsa_log_job( $job_id, 'Stage 3/5: Write - Menulis artikel...' );
+        
+        $agent = new Agents\Writer_Agent( $job_id, $research_pack, $settings );
+        $draft_pack = $agent->run();
+        
+        // Validate draft pack
+        if ( empty( $draft_pack['content'] ) ) {
+            throw new \Exception( 'Writer Agent gagal menghasilkan konten.' );
+        }
+        
+        $wpdb->update( $table_jobs, array(
+            'status' => 'writing',
+            'draft_pack' => wp_json_encode( $draft_pack ),
+        ), array( 'id' => $job_id ) );
+        
+        tsa_log_job( $job_id, 'Writing selesai. Melanjutkan ke QA...' );
+        self::schedule_job( $job_id, 2 );
+    }
+
+    /**
+     * Stage 4: QA - Spinning + Quality Check
+     */
+    private static function stage_qa( $job_id, $draft_pack, $settings, $table_jobs ) {
+        global $wpdb;
+        
+        tsa_log_job( $job_id, 'Stage 4/5: QA - Quality assurance dan spinning...' );
+        
+        $agent = new Agents\QA_Agent( $job_id, $draft_pack, $settings );
+        $draft_pack = $agent->run();
+        
+        $wpdb->update( $table_jobs, array(
+            'status' => 'qa',
+            'draft_pack' => wp_json_encode( $draft_pack ),
+        ), array( 'id' => $job_id ) );
+        
+        tsa_log_job( $job_id, 'QA selesai. Melanjutkan ke Images...' );
+        self::schedule_job( $job_id, 2 );
+    }
+
+    /**
+     * Stage 5: Images - Suggest gambar
+     */
+    private static function stage_images( $job_id, $draft_pack, $table_jobs ) {
+        global $wpdb;
+        
+        tsa_log_job( $job_id, 'Stage 5/5: Images - Merencanakan gambar...' );
+        
+        $agent = new Agents\Image_Agent( $job_id, $draft_pack );
+        $draft_pack = $agent->run();
+        
+        $wpdb->update( $table_jobs, array(
+            'status' => 'ready',
+            'draft_pack' => wp_json_encode( $draft_pack ),
+        ), array( 'id' => $job_id ) );
+        
+        tsa_log_job( $job_id, 'Semua stage selesai! Artikel siap untuk di-publish.' );
+    }
+
+    /**
+     * Load all agent dependencies
+     */
+    private static function load_dependencies() {
+        require_once TSA_PLUGIN_DIR . 'includes/helpers.php';
+        
+        $agents = array(
+            'class-research-agent.php',
+            'class-summarizer-agent.php',
+            'class-writer-agent.php',
+            'class-qa-agent.php',
+            'class-image-agent.php',
+        );
+        
+        foreach ( $agents as $agent ) {
+            $file = TSA_PLUGIN_DIR . 'includes/agents/' . $agent;
+            if ( file_exists( $file ) ) {
+                require_once $file;
+            }
+        }
+    }
+
     public static function process_batch() {
         global $wpdb;
         
         $table_jobs = $wpdb->prefix . 'tsa_jobs';
-        
-        // Get rate limit setting
         $settings = get_option( 'tsa_settings', array() );
-        $rate_limit = isset( $settings['rate_limit'] ) ? $settings['rate_limit'] : 5;
+        $rate_limit = isset( $settings['rate_limit'] ) ? intval( $settings['rate_limit'] ) : 3;
         
-        // Get jobs that need processing
+        // Get jobs that need processing - prioritize by status order
         $jobs = $wpdb->get_results( $wpdb->prepare(
-            "SELECT id FROM $table_jobs 
-             WHERE status IN ('queued', 'researching', 'drafting', 'qa', 'image_planning') 
-             ORDER BY created_at ASC 
+            "SELECT id, status FROM $table_jobs 
+             WHERE status IN ('queued', 'researching', 'summarizing', 'writing', 'qa', 'images') 
+             ORDER BY 
+                CASE status 
+                    WHEN 'images' THEN 1
+                    WHEN 'qa' THEN 2
+                    WHEN 'writing' THEN 3
+                    WHEN 'summarizing' THEN 4
+                    WHEN 'researching' THEN 5
+                    WHEN 'queued' THEN 6
+                END,
+                created_at ASC 
              LIMIT %d",
             $rate_limit
         ) );
@@ -217,17 +311,11 @@ class Queue {
             // Process the job
             self::process_job( $job->id );
             
-            // Small delay between jobs
-            usleep( 500000 ); // 0.5 seconds
+            // Delay between jobs to prevent overload
+            sleep( 1 );
         }
     }
 
-    /**
-     * Cancel a scheduled job
-     *
-     * @param int $job_id Job ID
-     * @return bool
-     */
     public static function cancel_job( $job_id ) {
         if ( function_exists( 'as_unschedule_action' ) ) {
             as_unschedule_action( 'tsa_process_job', array( 'job_id' => $job_id ), 'travelseo-autopublisher' );
@@ -238,11 +326,6 @@ class Queue {
         return true;
     }
 
-    /**
-     * Get queue status
-     *
-     * @return array
-     */
     public static function get_queue_status() {
         global $wpdb;
         
@@ -250,13 +333,18 @@ class Queue {
         
         $status = array(
             'queued' => $wpdb->get_var( "SELECT COUNT(*) FROM $table_jobs WHERE status = 'queued'" ),
-            'processing' => $wpdb->get_var( "SELECT COUNT(*) FROM $table_jobs WHERE status IN ('researching', 'drafting', 'qa', 'image_planning')" ),
+            'researching' => $wpdb->get_var( "SELECT COUNT(*) FROM $table_jobs WHERE status = 'researching'" ),
+            'summarizing' => $wpdb->get_var( "SELECT COUNT(*) FROM $table_jobs WHERE status = 'summarizing'" ),
+            'writing' => $wpdb->get_var( "SELECT COUNT(*) FROM $table_jobs WHERE status = 'writing'" ),
+            'qa' => $wpdb->get_var( "SELECT COUNT(*) FROM $table_jobs WHERE status = 'qa'" ),
+            'images' => $wpdb->get_var( "SELECT COUNT(*) FROM $table_jobs WHERE status = 'images'" ),
             'ready' => $wpdb->get_var( "SELECT COUNT(*) FROM $table_jobs WHERE status = 'ready'" ),
             'pushed' => $wpdb->get_var( "SELECT COUNT(*) FROM $table_jobs WHERE status = 'pushed'" ),
             'failed' => $wpdb->get_var( "SELECT COUNT(*) FROM $table_jobs WHERE status = 'failed'" ),
         );
         
-        // Check Action Scheduler status
+        $status['processing'] = $status['researching'] + $status['summarizing'] + $status['writing'] + $status['qa'] + $status['images'];
+        
         if ( function_exists( 'as_get_scheduled_actions' ) ) {
             $pending_actions = as_get_scheduled_actions( array(
                 'hook' => 'tsa_process_job',
@@ -269,12 +357,6 @@ class Queue {
         return $status;
     }
 
-    /**
-     * Retry failed jobs
-     *
-     * @param int $job_id Specific job ID or 0 for all failed jobs
-     * @return int Number of jobs queued for retry
-     */
     public static function retry_failed_jobs( $job_id = 0 ) {
         global $wpdb;
         
@@ -286,7 +368,6 @@ class Queue {
             return 1;
         }
         
-        // Retry all failed jobs
         $failed_jobs = $wpdb->get_results( "SELECT id FROM $table_jobs WHERE status = 'failed'" );
         
         foreach ( $failed_jobs as $job ) {
@@ -297,12 +378,6 @@ class Queue {
         return count( $failed_jobs );
     }
 
-    /**
-     * Clear completed jobs older than X days
-     *
-     * @param int $days Number of days
-     * @return int Number of jobs deleted
-     */
     public static function cleanup_old_jobs( $days = 30 ) {
         global $wpdb;
         
@@ -315,6 +390,14 @@ class Queue {
         ) );
         
         return $deleted;
+    }
+
+    /**
+     * Force process a specific job immediately
+     */
+    public static function force_process( $job_id ) {
+        self::load_dependencies();
+        self::process_job( $job_id );
     }
 }
 

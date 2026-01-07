@@ -105,6 +105,10 @@ class Plugin {
         require_once TSA_PLUGIN_DIR . 'includes/helpers.php';
         require_once TSA_PLUGIN_DIR . 'includes/class-queue.php';
         require_once TSA_PLUGIN_DIR . 'includes/class-updater.php';
+        require_once TSA_PLUGIN_DIR . 'includes/modules/class-title-suggester.php';
+        require_once TSA_PLUGIN_DIR . 'includes/modules/class-article-structure.php';
+        require_once TSA_PLUGIN_DIR . 'includes/spinner/class-spinner.php';
+        require_once TSA_PLUGIN_DIR . 'includes/agents/class-content-orchestrator.php';
 
 		$this->loader = new Loader();
 

@@ -1,16 +1,16 @@
 <?php
 /**
- * Writer Agent - SEO Structure & Full Draft Writer
+ * Writer Agent V2 - 5-AI Orchestrated Content Writer
  *
- * This agent is responsible for:
- * - Creating article structure and outline
- * - Writing full article content (±2000 words)
- * - Generating meta title, meta description, slug
- * - Auto-mapping/creating categories and tags
- * - Suggesting internal links
+ * This agent coordinates the 5 AI Writers through Content Orchestrator
+ * to produce comprehensive, high-quality travel articles (700-2000+ words).
  *
- * @link       https://example.com
- * @since      1.0.0
+ * Features:
+ * - 5-AI parallel writing workflow
+ * - Dynamic article structure based on content type
+ * - Professional Indonesian text spinning
+ * - Auto category and tag generation
+ * - SEO metadata optimization
  *
  * @package    TravelSEO_Autopublisher
  * @subpackage TravelSEO_Autopublisher/includes/agents
@@ -18,13 +18,17 @@
 
 namespace TravelSEO_Autopublisher\Agents;
 
+use TravelSEO_Autopublisher\Agents\Content_Orchestrator;
+use TravelSEO_Autopublisher\Modules\Title_Suggester;
+use TravelSEO_Autopublisher\Modules\Article_Structure;
+
 use function TravelSEO_Autopublisher\tsa_get_option;
 use function TravelSEO_Autopublisher\tsa_update_job;
 use function TravelSEO_Autopublisher\tsa_log_job;
 use function TravelSEO_Autopublisher\tsa_generate_meta_description;
 
 /**
- * Writer Agent Class
+ * Writer Agent V2 Class
  */
 class Writer_Agent {
 
@@ -57,29 +61,43 @@ class Writer_Agent {
     private $draft_pack;
 
     /**
+     * Content Orchestrator instance
+     *
+     * @var Content_Orchestrator
+     */
+    private $orchestrator;
+
+    /**
      * Constructor
      *
-     * @param int $job_id Job ID
+     * @param int   $job_id       Job ID
      * @param array $research_pack Research pack from Agent 1
-     * @param array $settings Job settings
+     * @param array $settings     Job settings
      */
     public function __construct( $job_id, $research_pack, $settings = array() ) {
         $this->job_id = $job_id;
         $this->research_pack = $research_pack;
         $this->settings = wp_parse_args( $settings, array(
-            'target_words' => 2000,
+            'target_words_min' => 700,
+            'target_words_max' => 2000,
             'language' => 'id',
             'tone' => 'informative',
+            'content_type' => 'destinasi',
+            'spin_content' => true,
+            'spin_intensity' => 50,
         ) );
-        
+
+        // Initialize draft pack
         $this->draft_pack = array(
             'title' => '',
             'slug' => '',
             'meta_title' => '',
             'meta_description' => '',
             'content' => '',
+            'content_html' => '',
             'excerpt' => '',
             'outline' => array(),
+            'sections' => array(),
             'category_id' => 0,
             'category_name' => '',
             'tag_ids' => array(),
@@ -87,9 +105,16 @@ class Writer_Agent {
             'internal_links' => array(),
             'faq' => array(),
             'schema_data' => array(),
+            'image_suggestions' => array(),
             'word_count' => 0,
+            'reading_time' => '',
+            'ai_writers_log' => array(),
             'created_at' => current_time( 'mysql' ),
         );
+
+        // Load Content Orchestrator
+        require_once TSA_PLUGIN_DIR . 'includes/agents/class-content-orchestrator.php';
+        $this->orchestrator = new Content_Orchestrator();
     }
 
     /**
@@ -98,776 +123,613 @@ class Writer_Agent {
      * @return array Draft pack
      */
     public function run() {
-        tsa_log_job( $this->job_id, 'Writer Agent: Starting article creation...' );
-        
+        tsa_log_job( $this->job_id, 'Writer Agent V2: Starting 5-AI article creation...' );
+
         // Update job status
         tsa_update_job( $this->job_id, array( 'status' => 'drafting' ) );
 
         $title = $this->research_pack['title'];
+        $content_type = $this->detect_content_type( $title );
 
-        // Step 1: Generate article structure/outline
-        $this->generate_outline();
+        tsa_log_job( $this->job_id, "Writer Agent V2: Detected content type: {$content_type}" );
 
-        // Step 2: Generate meta data
-        $this->generate_meta_data();
+        // Step 1: Generate article using 5-AI Orchestrator
+        $this->generate_article_with_orchestrator( $title, $content_type );
 
-        // Step 3: Write full article content
-        $this->write_content();
+        // Step 2: Generate enhanced meta data
+        $this->generate_enhanced_meta_data();
 
-        // Step 4: Handle categories
+        // Step 3: Handle categories (auto-create if needed)
         $this->handle_categories();
 
-        // Step 5: Generate tags
+        // Step 4: Generate tags (3-10 tags)
         $this->generate_tags();
 
-        // Step 6: Find internal links
+        // Step 5: Find internal links
         $this->find_internal_links();
 
-        // Step 7: Generate FAQ section
-        $this->generate_faq();
+        // Step 6: Generate FAQ section (if not already in content)
+        $this->ensure_faq_section();
 
-        // Step 8: Generate schema data
+        // Step 7: Generate schema data
         $this->generate_schema();
 
-        tsa_log_job( $this->job_id, 'Writer Agent: Completed. Word count: ' . $this->draft_pack['word_count'] );
+        // Step 8: Generate image suggestions
+        $this->generate_image_suggestions();
+
+        // Step 9: Convert Markdown to HTML
+        $this->convert_to_html();
+
+        tsa_log_job( $this->job_id, 'Writer Agent V2: Completed. Word count: ' . $this->draft_pack['word_count'] );
 
         return $this->draft_pack;
     }
 
     /**
-     * Generate article outline
+     * Detect content type from title
+     *
+     * @param string $title Article title
+     * @return string Content type
      */
-    private function generate_outline() {
-        $title = $this->research_pack['title'];
-        
-        // Default outline structure for travel content
-        $outline = array(
-            array(
-                'tag' => 'h2',
-                'text' => 'Sekilas Tentang ' . $title,
-                'description' => 'Pengenalan singkat tentang destinasi',
-            ),
-            array(
-                'tag' => 'h2',
-                'text' => 'Sejarah dan Latar Belakang',
-                'description' => 'Sejarah dan asal-usul destinasi',
-            ),
-            array(
-                'tag' => 'h2',
-                'text' => 'Lokasi dan Cara Menuju ' . $title,
-                'description' => 'Informasi lokasi dan akses transportasi',
-            ),
-            array(
-                'tag' => 'h2',
-                'text' => 'Harga Tiket Masuk',
-                'description' => 'Informasi harga tiket dan biaya',
-            ),
-            array(
-                'tag' => 'h2',
-                'text' => 'Jam Operasional',
-                'description' => 'Jam buka dan tutup',
-            ),
-            array(
-                'tag' => 'h2',
-                'text' => 'Fasilitas yang Tersedia',
-                'description' => 'Daftar fasilitas di lokasi',
-            ),
-            array(
-                'tag' => 'h2',
-                'text' => 'Aktivitas dan Daya Tarik Utama',
-                'description' => 'Hal-hal menarik yang bisa dilakukan',
-            ),
-            array(
-                'tag' => 'h2',
-                'text' => 'Tips Berkunjung ke ' . $title,
-                'description' => 'Tips dan saran untuk pengunjung',
-            ),
-            array(
-                'tag' => 'h2',
-                'text' => 'Rekomendasi Tempat Sekitar',
-                'description' => 'Destinasi lain di sekitar lokasi',
-            ),
-            array(
-                'tag' => 'h2',
-                'text' => 'FAQ - Pertanyaan yang Sering Diajukan',
-                'description' => 'Pertanyaan umum tentang destinasi',
-            ),
-            array(
-                'tag' => 'h2',
-                'text' => 'Kesimpulan',
-                'description' => 'Ringkasan dan ajakan berkunjung',
-            ),
-        );
+    private function detect_content_type( $title ) {
+        $title_lower = strtolower( $title );
 
-        // If AI is available, enhance the outline
-        if ( $this->has_ai_api() ) {
-            $outline = $this->enhance_outline_with_ai( $outline );
-        }
-
-        $this->draft_pack['outline'] = $outline;
-        
-        tsa_log_job( $this->job_id, 'Writer Agent: Generated outline with ' . count( $outline ) . ' sections.' );
-    }
-
-    /**
-     * Generate meta data (title, description, slug)
-     */
-    private function generate_meta_data() {
-        $title = $this->research_pack['title'];
-        $year = date( 'Y' );
-
-        // Generate SEO-friendly meta title (50-60 chars)
-        $meta_title_templates = array(
-            $title . ' - Panduan Lengkap ' . $year,
-            $title . ': Harga Tiket, Jam Buka & Tips ' . $year,
-            'Wisata ' . $title . ' - Info Lengkap ' . $year,
-            $title . ' - Review, Lokasi & Fasilitas ' . $year,
-        );
-        
-        // Pick the best one that fits 50-60 chars
-        $meta_title = $title . ' - Panduan Lengkap ' . $year;
-        foreach ( $meta_title_templates as $template ) {
-            if ( strlen( $template ) >= 50 && strlen( $template ) <= 60 ) {
-                $meta_title = $template;
-                break;
+        // Kuliner keywords
+        $kuliner_keywords = array( 'makanan', 'kuliner', 'restoran', 'cafe', 'kafe', 'warung', 'rumah makan', 'nasi', 'mie', 'sate', 'bakso', 'soto', 'rendang', 'gudeg', 'seafood', 'minuman', 'kopi', 'es', 'jajanan' );
+        foreach ( $kuliner_keywords as $kw ) {
+            if ( strpos( $title_lower, $kw ) !== false ) {
+                return 'kuliner';
             }
         }
-        
-        // Truncate if still too long
-        if ( strlen( $meta_title ) > 60 ) {
-            $meta_title = substr( $meta_title, 0, 57 ) . '...';
-        }
 
-        $this->draft_pack['title'] = $title;
-        $this->draft_pack['meta_title'] = $meta_title;
-        
-        // Generate slug
-        $this->draft_pack['slug'] = sanitize_title( $title );
-
-        // Generate meta description (150-160 chars)
-        $location = ! empty( $this->research_pack['location_info'] ) ? $this->research_pack['location_info'] : '';
-        $price = ! empty( $this->research_pack['pricing_info'] ) ? $this->research_pack['pricing_info'] : '';
-        
-        $meta_desc = "Panduan lengkap " . $title . " " . $year . ". ";
-        if ( ! empty( $location ) ) {
-            $meta_desc .= "Lokasi di " . $location . ". ";
-        }
-        if ( ! empty( $price ) ) {
-            $meta_desc .= "Harga tiket mulai " . $price . ". ";
-        }
-        $meta_desc .= "Info jam buka, fasilitas, dan tips berkunjung.";
-        
-        // Truncate to 160 chars
-        if ( strlen( $meta_desc ) > 160 ) {
-            $meta_desc = substr( $meta_desc, 0, 157 ) . '...';
-        }
-        
-        $this->draft_pack['meta_description'] = $meta_desc;
-        
-        tsa_log_job( $this->job_id, 'Writer Agent: Generated meta data.' );
-    }
-
-    /**
-     * Write full article content
-     */
-    private function write_content() {
-        $title = $this->research_pack['title'];
-        
-        // Check if AI API is available
-        if ( $this->has_ai_api() ) {
-            $content = $this->write_content_with_ai();
-        } else {
-            $content = $this->write_content_without_ai();
-        }
-        
-        $this->draft_pack['content'] = $content;
-        $this->draft_pack['word_count'] = str_word_count( wp_strip_all_tags( $content ) );
-        
-        // Generate excerpt
-        $this->draft_pack['excerpt'] = tsa_generate_meta_description( $content, 300 );
-    }
-
-    /**
-     * Write content without AI (template-based)
-     *
-     * @return string
-     */
-    private function write_content_without_ai() {
-        $title = $this->research_pack['title'];
-        $content = '';
-        
-        // Introduction
-        $content .= '<p>' . $this->generate_intro_paragraph() . '</p>' . "\n\n";
-        
-        // Section 1: Sekilas Tentang
-        $content .= '<h2>Sekilas Tentang ' . esc_html( $title ) . '</h2>' . "\n";
-        $content .= '<p>' . $this->generate_overview_paragraph() . '</p>' . "\n\n";
-        
-        // Section 2: Sejarah
-        $content .= '<h2>Sejarah dan Latar Belakang</h2>' . "\n";
-        $content .= '<p>' . $this->generate_history_paragraph() . '</p>' . "\n\n";
-        
-        // Section 3: Lokasi
-        $content .= '<h2>Lokasi dan Cara Menuju ' . esc_html( $title ) . '</h2>' . "\n";
-        $content .= $this->generate_location_section();
-        
-        // Section 4: Harga Tiket
-        $content .= '<h2>Harga Tiket Masuk</h2>' . "\n";
-        $content .= $this->generate_pricing_section();
-        
-        // Section 5: Jam Operasional
-        $content .= '<h2>Jam Operasional</h2>' . "\n";
-        $content .= $this->generate_hours_section();
-        
-        // Section 6: Fasilitas
-        $content .= '<h2>Fasilitas yang Tersedia</h2>' . "\n";
-        $content .= $this->generate_facilities_section();
-        
-        // Section 7: Aktivitas
-        $content .= '<h2>Aktivitas dan Daya Tarik Utama</h2>' . "\n";
-        $content .= $this->generate_activities_section();
-        
-        // Section 8: Tips
-        $content .= '<h2>Tips Berkunjung ke ' . esc_html( $title ) . '</h2>' . "\n";
-        $content .= $this->generate_tips_section();
-        
-        // Section 9: Rekomendasi Sekitar
-        $content .= '<h2>Rekomendasi Tempat Sekitar</h2>' . "\n";
-        $content .= '<p>Setelah mengunjungi ' . esc_html( $title ) . ', Anda juga bisa menjelajahi berbagai destinasi menarik lainnya di sekitar lokasi. Beberapa tempat wisata terdekat yang layak dikunjungi antara lain objek wisata alam, kuliner khas daerah, dan spot foto instagramable yang tak kalah menarik.</p>' . "\n\n";
-        
-        // Section 10: Kesimpulan
-        $content .= '<h2>Kesimpulan</h2>' . "\n";
-        $content .= '<p>' . esc_html( $title ) . ' merupakan destinasi wisata yang sangat layak untuk dikunjungi. Dengan berbagai daya tarik yang ditawarkan, fasilitas yang memadai, serta aksesibilitas yang mudah, tempat ini cocok untuk liburan bersama keluarga, teman, maupun pasangan. Pastikan untuk merencanakan kunjungan Anda dengan baik dan nikmati setiap momen yang ada.</p>' . "\n";
-        
-        return $content;
-    }
-
-    /**
-     * Generate introduction paragraph
-     *
-     * @return string
-     */
-    private function generate_intro_paragraph() {
-        $title = $this->research_pack['title'];
-        $year = date( 'Y' );
-        
-        $intros = array(
-            "Mencari destinasi wisata yang menarik untuk dikunjungi? {$title} bisa menjadi pilihan tepat untuk liburan Anda di tahun {$year}. Destinasi ini menawarkan pengalaman wisata yang tak terlupakan dengan berbagai daya tarik yang memukau.",
-            "{$title} adalah salah satu destinasi wisata yang wajib masuk dalam daftar kunjungan Anda. Dengan keindahan alam yang memesona dan berbagai fasilitas yang tersedia, tempat ini menjadi favorit wisatawan lokal maupun mancanegara.",
-            "Ingin tahu lebih banyak tentang {$title}? Artikel ini akan membahas secara lengkap mulai dari lokasi, harga tiket, jam operasional, hingga tips berkunjung yang berguna untuk perjalanan Anda.",
-        );
-        
-        return $intros[ array_rand( $intros ) ];
-    }
-
-    /**
-     * Generate overview paragraph
-     *
-     * @return string
-     */
-    private function generate_overview_paragraph() {
-        $title = $this->research_pack['title'];
-        $facts = $this->research_pack['facts'] ?? array();
-        
-        $overview = "{$title} merupakan salah satu destinasi wisata yang menarik perhatian banyak pengunjung. ";
-        
-        if ( ! empty( $facts ) ) {
-            $overview .= implode( ' ', array_slice( $facts, 0, 3 ) ) . ' ';
-        }
-        
-        $overview .= "Tempat ini menawarkan pengalaman wisata yang unik dan berbeda dari destinasi lainnya, menjadikannya pilihan tepat untuk mengisi waktu liburan Anda.";
-        
-        return $overview;
-    }
-
-    /**
-     * Generate history paragraph
-     *
-     * @return string
-     */
-    private function generate_history_paragraph() {
-        $title = $this->research_pack['title'];
-        
-        return "{$title} memiliki sejarah yang menarik untuk diketahui. Destinasi ini telah menjadi bagian penting dari warisan budaya dan pariwisata daerah setempat. Seiring berjalannya waktu, tempat ini terus berkembang dan semakin populer di kalangan wisatawan yang mencari pengalaman wisata yang autentik dan berkesan.";
-    }
-
-    /**
-     * Generate location section
-     *
-     * @return string
-     */
-    private function generate_location_section() {
-        $title = $this->research_pack['title'];
-        $location = $this->research_pack['location_info'] ?? '';
-        
-        $content = '<p>';
-        
-        if ( ! empty( $location ) ) {
-            $content .= esc_html( $title ) . ' berlokasi di ' . esc_html( $location ) . '. ';
-        } else {
-            $content .= esc_html( $title ) . ' dapat dijangkau dengan berbagai moda transportasi. ';
-        }
-        
-        $content .= 'Untuk mencapai lokasi ini, Anda bisa menggunakan kendaraan pribadi maupun transportasi umum. Berikut beberapa pilihan akses menuju lokasi:</p>' . "\n";
-        
-        $content .= '<ul>' . "\n";
-        $content .= '<li><strong>Kendaraan Pribadi:</strong> Gunakan aplikasi navigasi seperti Google Maps atau Waze untuk panduan rute terbaik.</li>' . "\n";
-        $content .= '<li><strong>Transportasi Umum:</strong> Tersedia angkutan umum dari pusat kota menuju lokasi wisata.</li>' . "\n";
-        $content .= '<li><strong>Ojek Online:</strong> Layanan ojek online seperti Gojek dan Grab tersedia untuk kemudahan akses.</li>' . "\n";
-        $content .= '</ul>' . "\n\n";
-        
-        return $content;
-    }
-
-    /**
-     * Generate pricing section
-     *
-     * @return string
-     */
-    private function generate_pricing_section() {
-        $title = $this->research_pack['title'];
-        $price = $this->research_pack['pricing_info'] ?? '';
-        
-        $content = '<p>Berikut informasi harga tiket masuk ' . esc_html( $title ) . ':</p>' . "\n";
-        
-        $content .= '<table>' . "\n";
-        $content .= '<thead><tr><th>Kategori</th><th>Harga</th></tr></thead>' . "\n";
-        $content .= '<tbody>' . "\n";
-        
-        if ( ! empty( $price ) ) {
-            $content .= '<tr><td>Tiket Masuk</td><td>' . esc_html( $price ) . '</td></tr>' . "\n";
-        } else {
-            $content .= '<tr><td>Dewasa</td><td>Hubungi pengelola untuk info terbaru</td></tr>' . "\n";
-            $content .= '<tr><td>Anak-anak</td><td>Hubungi pengelola untuk info terbaru</td></tr>' . "\n";
-        }
-        
-        $content .= '</tbody>' . "\n";
-        $content .= '</table>' . "\n\n";
-        
-        $content .= '<p><em>Catatan: Harga tiket dapat berubah sewaktu-waktu. Disarankan untuk menghubungi pihak pengelola atau mengecek informasi terbaru sebelum berkunjung.</em></p>' . "\n\n";
-        
-        return $content;
-    }
-
-    /**
-     * Generate hours section
-     *
-     * @return string
-     */
-    private function generate_hours_section() {
-        $hours = $this->research_pack['hours_info'] ?? '';
-        
-        $content = '<p>';
-        
-        if ( ! empty( $hours ) ) {
-            $content .= 'Jam operasional: ' . esc_html( $hours ) . '. ';
-        }
-        
-        $content .= 'Untuk informasi jam operasional terkini, disarankan untuk menghubungi pihak pengelola atau mengecek media sosial resmi destinasi ini.</p>' . "\n\n";
-        
-        $content .= '<p><strong>Tips:</strong> Datanglah di pagi hari untuk menghindari keramaian dan mendapatkan pengalaman yang lebih nyaman.</p>' . "\n\n";
-        
-        return $content;
-    }
-
-    /**
-     * Generate facilities section
-     *
-     * @return string
-     */
-    private function generate_facilities_section() {
-        $content = '<p>Untuk kenyamanan pengunjung, tersedia berbagai fasilitas di lokasi wisata ini:</p>' . "\n";
-        
-        $content .= '<ul>' . "\n";
-        $content .= '<li>Area parkir yang luas</li>' . "\n";
-        $content .= '<li>Toilet umum</li>' . "\n";
-        $content .= '<li>Mushola/tempat ibadah</li>' . "\n";
-        $content .= '<li>Warung makan dan minuman</li>' . "\n";
-        $content .= '<li>Spot foto instagramable</li>' . "\n";
-        $content .= '<li>Pusat informasi wisata</li>' . "\n";
-        $content .= '</ul>' . "\n\n";
-        
-        return $content;
-    }
-
-    /**
-     * Generate activities section
-     *
-     * @return string
-     */
-    private function generate_activities_section() {
-        $title = $this->research_pack['title'];
-        
-        $content = '<p>Ada banyak aktivitas menarik yang bisa Anda lakukan saat berkunjung ke ' . esc_html( $title ) . ':</p>' . "\n";
-        
-        $content .= '<ol>' . "\n";
-        $content .= '<li><strong>Menikmati Pemandangan:</strong> Abadikan momen indah dengan latar belakang pemandangan yang memukau.</li>' . "\n";
-        $content .= '<li><strong>Fotografi:</strong> Berbagai spot foto menarik tersedia untuk mengabadikan kenangan liburan Anda.</li>' . "\n";
-        $content .= '<li><strong>Wisata Kuliner:</strong> Cicipi berbagai makanan dan minuman khas yang tersedia di sekitar lokasi.</li>' . "\n";
-        $content .= '<li><strong>Bersantai:</strong> Nikmati suasana tenang dan sejuk untuk melepas penat dari rutinitas sehari-hari.</li>' . "\n";
-        $content .= '<li><strong>Edukasi:</strong> Pelajari sejarah dan keunikan destinasi ini melalui informasi yang tersedia.</li>' . "\n";
-        $content .= '</ol>' . "\n\n";
-        
-        return $content;
-    }
-
-    /**
-     * Generate tips section
-     *
-     * @return string
-     */
-    private function generate_tips_section() {
-        $title = $this->research_pack['title'];
-        $tips = $this->research_pack['tips'] ?? array();
-        
-        $content = '<p>Berikut beberapa tips yang berguna untuk kunjungan Anda:</p>' . "\n";
-        
-        $content .= '<ul>' . "\n";
-        
-        // Add tips from research if available
-        if ( ! empty( $tips ) ) {
-            foreach ( array_slice( $tips, 0, 3 ) as $tip ) {
-                $content .= '<li>' . esc_html( $tip ) . '</li>' . "\n";
+        // Hotel keywords
+        $hotel_keywords = array( 'hotel', 'resort', 'villa', 'penginapan', 'homestay', 'hostel', 'guest house', 'cottage', 'glamping', 'menginap' );
+        foreach ( $hotel_keywords as $kw ) {
+            if ( strpos( $title_lower, $kw ) !== false ) {
+                return 'hotel';
             }
         }
-        
-        // Add default tips
-        $content .= '<li>Datang di pagi hari untuk menghindari keramaian dan cuaca yang terik.</li>' . "\n";
-        $content .= '<li>Bawa perlengkapan seperti topi, sunscreen, dan air minum yang cukup.</li>' . "\n";
-        $content .= '<li>Kenakan pakaian dan alas kaki yang nyaman untuk berjalan.</li>' . "\n";
-        $content .= '<li>Jaga kebersihan dan buang sampah pada tempatnya.</li>' . "\n";
-        $content .= '<li>Patuhi peraturan yang berlaku di lokasi wisata.</li>' . "\n";
-        $content .= '</ul>' . "\n\n";
-        
-        return $content;
+
+        // Default to destinasi
+        return 'destinasi';
     }
 
     /**
-     * Write content with AI
+     * Generate article using 5-AI Content Orchestrator
      *
-     * @return string
+     * @param string $title        Article title
+     * @param string $content_type Content type
      */
-    private function write_content_with_ai() {
-        $api_key = tsa_get_option( 'openai_api_key', '' );
-        $api_endpoint = tsa_get_option( 'openai_endpoint', 'https://api.openai.com/v1/chat/completions' );
-        $model = tsa_get_option( 'openai_model', 'gpt-3.5-turbo' );
-        
-        $title = $this->research_pack['title'];
-        $target_words = $this->settings['target_words'];
-        
-        // Prepare research data for AI
-        $research_summary = "Topik: " . $title . "\n";
-        $research_summary .= "Lokasi: " . ( $this->research_pack['location_info'] ?? 'Tidak tersedia' ) . "\n";
-        $research_summary .= "Harga: " . ( $this->research_pack['pricing_info'] ?? 'Tidak tersedia' ) . "\n";
-        $research_summary .= "Jam Buka: " . ( $this->research_pack['hours_info'] ?? 'Tidak tersedia' ) . "\n";
-        $research_summary .= "Fakta: " . implode( '; ', array_slice( $this->research_pack['facts'] ?? array(), 0, 5 ) ) . "\n";
-        $research_summary .= "Tips: " . implode( '; ', array_slice( $this->research_pack['tips'] ?? array(), 0, 3 ) ) . "\n";
-        
-        $prompt = "Buatlah artikel SEO-friendly tentang destinasi wisata \"{$title}\" dalam Bahasa Indonesia dengan panjang sekitar {$target_words} kata.
+    private function generate_article_with_orchestrator( $title, $content_type ) {
+        tsa_log_job( $this->job_id, 'Writer Agent V2: Initiating 5-AI Orchestrator...' );
 
-Data penelitian:
-{$research_summary}
+        // Prepare research data for orchestrator
+        $research_data = array(
+            'facts' => $this->research_pack['key_points'] ?? array(),
+            'prices' => $this->extract_prices_from_research(),
+            'hours' => $this->extract_hours_from_research(),
+            'facilities' => $this->extract_facilities_from_research(),
+            'location' => $this->research_pack['location_info'] ?? '',
+        );
 
-Struktur artikel harus mencakup:
-1. Paragraf pembuka yang menarik
-2. Sekilas tentang destinasi
-3. Sejarah dan latar belakang
-4. Lokasi dan cara menuju lokasi
-5. Harga tiket masuk (dalam format tabel jika memungkinkan)
-6. Jam operasional
-7. Fasilitas yang tersedia
-8. Aktivitas dan daya tarik utama
-9. Tips berkunjung
-10. Rekomendasi tempat sekitar
-11. Kesimpulan
+        // Extract location from title or research
+        $location = $this->extract_location( $title );
 
-Gunakan heading H2 untuk setiap section utama. Tulis dengan gaya informatif namun engaging. Sertakan informasi praktis yang berguna bagi pembaca. Format output dalam HTML.";
+        // Generate article
+        $result = $this->orchestrator->generate_article(
+            $title,
+            $content_type,
+            $research_data,
+            array(
+                'spin_content' => $this->settings['spin_content'],
+                'spin_intensity' => $this->settings['spin_intensity'],
+                'preserve_keywords' => array( $title ),
+                'location' => $location,
+            )
+        );
 
-        tsa_log_job( $this->job_id, 'Writer Agent: Generating content with AI...' );
+        if ( $result['success'] ) {
+            $this->draft_pack['title'] = $title;
+            $this->draft_pack['content'] = $result['article'];
+            $this->draft_pack['word_count'] = $result['word_count'];
+            $this->draft_pack['sections'] = $result['sections'];
+            $this->draft_pack['ai_writers_log'] = $result['log'];
+            $this->draft_pack['reading_time'] = $result['metadata']['reading_time'];
 
-        $response = wp_remote_post( $api_endpoint, array(
-            'timeout' => 120,
-            'headers' => array(
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type' => 'application/json',
-            ),
-            'body' => wp_json_encode( array(
-                'model' => $model,
-                'messages' => array(
-                    array(
-                        'role' => 'system',
-                        'content' => 'Kamu adalah penulis konten wisata profesional yang ahli dalam SEO. Tulis artikel yang informatif, menarik, dan original. Gunakan Bahasa Indonesia yang baik dan benar.',
-                    ),
-                    array(
-                        'role' => 'user',
-                        'content' => $prompt,
-                    ),
-                ),
-                'temperature' => 0.7,
-                'max_tokens' => 4000,
-            ) ),
-        ) );
+            // Use orchestrator's metadata
+            $this->draft_pack['meta_title'] = $result['metadata']['meta_title'];
+            $this->draft_pack['meta_description'] = $result['metadata']['meta_description'];
+            $this->draft_pack['tag_names'] = $result['metadata']['tags'];
+            $this->draft_pack['category_name'] = $result['metadata']['categories'][0] ?? 'Destinasi Wisata';
 
-        if ( is_wp_error( $response ) ) {
-            tsa_log_job( $this->job_id, 'Writer Agent: AI error - ' . $response->get_error_message() . '. Falling back to template.' );
-            return $this->write_content_without_ai();
+            tsa_log_job( $this->job_id, "Writer Agent V2: 5-AI Orchestrator completed. {$result['word_count']} words generated." );
+
+            // Log each AI writer's contribution
+            foreach ( $result['sections'] as $section_id => $section_data ) {
+                $ai_num = $section_data['ai_writer'];
+                $words = $section_data['word_count'];
+                tsa_log_job( $this->job_id, "  - AI Writer #{$ai_num}: Section '{$section_id}' ({$words} words)" );
+            }
+        } else {
+            tsa_log_job( $this->job_id, 'Writer Agent V2: Orchestrator failed, using fallback...', 'warning' );
+            $this->generate_fallback_content( $title );
         }
-
-        $body = wp_remote_retrieve_body( $response );
-        $data = json_decode( $body, true );
-
-        if ( isset( $data['choices'][0]['message']['content'] ) ) {
-            tsa_log_job( $this->job_id, 'Writer Agent: AI content generated successfully.' );
-            return $data['choices'][0]['message']['content'];
-        }
-
-        tsa_log_job( $this->job_id, 'Writer Agent: AI response invalid. Falling back to template.' );
-        return $this->write_content_without_ai();
     }
 
     /**
-     * Handle category mapping/creation
+     * Extract prices from research data
+     *
+     * @return array
      */
-    private function handle_categories() {
-        $title = strtolower( $this->research_pack['title'] );
-        
-        // Detect category based on keywords
-        $category_map = array(
-            'wisata alam' => array( 'pantai', 'gunung', 'air terjun', 'danau', 'hutan', 'taman nasional', 'bukit' ),
-            'wisata budaya' => array( 'candi', 'museum', 'keraton', 'pura', 'masjid', 'gereja', 'tradisional' ),
-            'wisata kuliner' => array( 'kuliner', 'makanan', 'restoran', 'cafe', 'warung', 'masakan' ),
-            'wisata keluarga' => array( 'taman bermain', 'waterpark', 'kebun binatang', 'aquarium', 'theme park' ),
-            'wisata religi' => array( 'masjid', 'gereja', 'pura', 'vihara', 'klenteng', 'ziarah' ),
-        );
-        
-        $detected_category = 'Wisata';
-        
-        foreach ( $category_map as $category => $keywords ) {
-            foreach ( $keywords as $keyword ) {
-                if ( strpos( $title, $keyword ) !== false ) {
-                    $detected_category = ucwords( $category );
-                    break 2;
+    private function extract_prices_from_research() {
+        $prices = array();
+
+        if ( ! empty( $this->research_pack['pricing_info'] ) ) {
+            $prices[] = $this->research_pack['pricing_info'];
+        }
+
+        // Extract from scraped content
+        if ( ! empty( $this->research_pack['scraped_content'] ) ) {
+            foreach ( $this->research_pack['scraped_content'] as $content ) {
+                // Look for price patterns
+                if ( preg_match_all( '/(?:Rp|IDR)\s*[\d.,]+/i', $content, $matches ) ) {
+                    $prices = array_merge( $prices, $matches[0] );
                 }
             }
         }
-        
-        // Check if category exists
-        $category = get_term_by( 'name', $detected_category, 'category' );
-        
-        if ( $category ) {
-            $this->draft_pack['category_id'] = $category->term_id;
-            $this->draft_pack['category_name'] = $category->name;
-        } else {
-            // Category will be created when post is pushed
-            $this->draft_pack['category_id'] = 0;
-            $this->draft_pack['category_name'] = $detected_category;
-        }
-        
-        tsa_log_job( $this->job_id, 'Writer Agent: Category set to "' . $detected_category . '".' );
+
+        return array_unique( array_slice( $prices, 0, 5 ) );
     }
 
     /**
-     * Generate tags
+     * Extract hours from research data
+     *
+     * @return array
+     */
+    private function extract_hours_from_research() {
+        $hours = array();
+
+        if ( ! empty( $this->research_pack['hours_info'] ) ) {
+            $hours[] = $this->research_pack['hours_info'];
+        }
+
+        // Extract from scraped content
+        if ( ! empty( $this->research_pack['scraped_content'] ) ) {
+            foreach ( $this->research_pack['scraped_content'] as $content ) {
+                // Look for time patterns
+                if ( preg_match_all( '/\d{1,2}[:.]\d{2}\s*[-–]\s*\d{1,2}[:.]\d{2}/i', $content, $matches ) ) {
+                    $hours = array_merge( $hours, $matches[0] );
+                }
+            }
+        }
+
+        return array_unique( array_slice( $hours, 0, 5 ) );
+    }
+
+    /**
+     * Extract facilities from research data
+     *
+     * @return array
+     */
+    private function extract_facilities_from_research() {
+        $facilities = array();
+
+        // Common facility keywords
+        $facility_keywords = array( 'toilet', 'mushola', 'parkir', 'wifi', 'restoran', 'warung', 'gazebo', 'kolam renang', 'playground', 'taman' );
+
+        if ( ! empty( $this->research_pack['scraped_content'] ) ) {
+            foreach ( $this->research_pack['scraped_content'] as $content ) {
+                $content_lower = strtolower( $content );
+                foreach ( $facility_keywords as $facility ) {
+                    if ( strpos( $content_lower, $facility ) !== false ) {
+                        $facilities[] = ucfirst( $facility );
+                    }
+                }
+            }
+        }
+
+        return array_unique( $facilities );
+    }
+
+    /**
+     * Extract location from title
+     *
+     * @param string $title Article title
+     * @return string Location
+     */
+    private function extract_location( $title ) {
+        // Common Indonesian location patterns
+        $locations = array(
+            'Bandung', 'Jakarta', 'Surabaya', 'Yogyakarta', 'Bali', 'Malang', 'Semarang',
+            'Bogor', 'Bekasi', 'Tangerang', 'Depok', 'Medan', 'Makassar', 'Palembang',
+            'Lombok', 'Labuan Bajo', 'Raja Ampat', 'Bromo', 'Dieng', 'Pangandaran',
+        );
+
+        foreach ( $locations as $location ) {
+            if ( stripos( $title, $location ) !== false ) {
+                return $location;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Generate fallback content (template-based)
+     *
+     * @param string $title Article title
+     */
+    private function generate_fallback_content( $title ) {
+        $year = date( 'Y' );
+
+        $content = "# {$title}\n\n";
+        $content .= "*Panduan lengkap {$title} {$year}. Info jam buka, fasilitas, harga tiket, dan tips berkunjung.*\n\n";
+
+        $content .= "## Sekilas Tentang {$title}\n\n";
+        $content .= "{$title} merupakan salah satu destinasi wisata yang menarik perhatian banyak pengunjung. Tempat ini menawarkan pengalaman wisata yang unik dan berbeda dari destinasi lainnya.\n\n";
+
+        $content .= "## Lokasi dan Cara Menuju {$title}\n\n";
+        $content .= "Untuk menuju lokasi, Anda dapat menggunakan kendaraan pribadi atau transportasi umum. Gunakan aplikasi navigasi untuk panduan rute terbaik.\n\n";
+
+        $content .= "## Harga Tiket Masuk\n\n";
+        $content .= "| Kategori | Harga |\n|----------|-------|\n| Dewasa | Hubungi pengelola |\n| Anak-anak | Hubungi pengelola |\n\n";
+
+        $content .= "## Jam Operasional\n\n";
+        $content .= "Untuk informasi jam operasional terkini, silakan hubungi pihak pengelola.\n\n";
+
+        $content .= "## Tips Berkunjung\n\n";
+        $content .= "- Datanglah di pagi hari untuk menghindari keramaian\n";
+        $content .= "- Bawa perlengkapan yang diperlukan\n";
+        $content .= "- Patuhi peraturan yang berlaku\n\n";
+
+        $content .= "## Kesimpulan\n\n";
+        $content .= "{$title} adalah destinasi yang layak untuk dikunjungi. Segera rencanakan kunjungan Anda!\n";
+
+        $this->draft_pack['title'] = $title;
+        $this->draft_pack['content'] = $content;
+        $this->draft_pack['word_count'] = str_word_count( strip_tags( $content ) );
+    }
+
+    /**
+     * Generate enhanced meta data
+     */
+    private function generate_enhanced_meta_data() {
+        $title = $this->draft_pack['title'];
+        $year = date( 'Y' );
+
+        // Generate slug
+        $this->draft_pack['slug'] = sanitize_title( $title );
+
+        // Enhance meta title if needed
+        if ( empty( $this->draft_pack['meta_title'] ) ) {
+            $this->draft_pack['meta_title'] = "{$title} {$year}: Panduan Lengkap & Tips";
+            if ( strlen( $this->draft_pack['meta_title'] ) > 60 ) {
+                $this->draft_pack['meta_title'] = substr( $this->draft_pack['meta_title'], 0, 57 ) . '...';
+            }
+        }
+
+        // Enhance meta description if needed
+        if ( empty( $this->draft_pack['meta_description'] ) ) {
+            $this->draft_pack['meta_description'] = "Panduan lengkap {$title} {$year}. Info harga tiket, jam buka, fasilitas, dan tips berkunjung.";
+            if ( strlen( $this->draft_pack['meta_description'] ) > 160 ) {
+                $this->draft_pack['meta_description'] = substr( $this->draft_pack['meta_description'], 0, 157 ) . '...';
+            }
+        }
+
+        // Generate excerpt
+        $this->draft_pack['excerpt'] = $this->draft_pack['meta_description'];
+
+        tsa_log_job( $this->job_id, 'Writer Agent V2: Enhanced meta data generated.' );
+    }
+
+    /**
+     * Handle categories (auto-create if needed)
+     */
+    private function handle_categories() {
+        $category_name = $this->draft_pack['category_name'] ?: 'Destinasi Wisata';
+
+        // Check if category exists
+        $term = term_exists( $category_name, 'category' );
+
+        if ( ! $term ) {
+            // Create new category
+            $result = wp_insert_term( $category_name, 'category', array(
+                'description' => "Artikel tentang {$category_name}",
+            ) );
+
+            if ( ! is_wp_error( $result ) ) {
+                $this->draft_pack['category_id'] = $result['term_id'];
+                tsa_log_job( $this->job_id, "Writer Agent V2: Created new category: {$category_name}" );
+            }
+        } else {
+            $this->draft_pack['category_id'] = is_array( $term ) ? $term['term_id'] : $term;
+        }
+
+        $this->draft_pack['category_name'] = $category_name;
+    }
+
+    /**
+     * Generate tags (3-10 tags)
      */
     private function generate_tags() {
-        $title = $this->research_pack['title'];
-        $keywords = $this->research_pack['keywords'] ?? array();
-        
-        // Generate tags from title and keywords
-        $tags = array();
-        
-        // Add title words as tags
-        $title_words = explode( ' ', $title );
-        foreach ( $title_words as $word ) {
-            if ( strlen( $word ) > 3 ) {
-                $tags[] = ucfirst( strtolower( $word ) );
+        $title = $this->draft_pack['title'];
+        $tags = $this->draft_pack['tag_names'] ?: array();
+
+        // Ensure we have at least 3 tags
+        if ( count( $tags ) < 3 ) {
+            // Add from title words
+            $title_words = explode( ' ', $title );
+            foreach ( $title_words as $word ) {
+                if ( strlen( $word ) > 3 && count( $tags ) < 10 ) {
+                    $tags[] = $word;
+                }
+            }
+
+            // Add common travel tags
+            $common_tags = array( 'wisata', 'liburan', 'traveling', 'jalan-jalan', 'rekreasi' );
+            foreach ( $common_tags as $tag ) {
+                if ( count( $tags ) < 10 ) {
+                    $tags[] = $tag;
+                }
             }
         }
-        
-        // Add keywords as tags
-        foreach ( array_slice( $keywords, 0, 5 ) as $keyword ) {
-            $tags[] = ucfirst( strtolower( $keyword ) );
-        }
-        
-        // Add common travel tags
-        $common_tags = array( 'Wisata', 'Travel', 'Liburan', 'Indonesia', date( 'Y' ) );
-        $tags = array_merge( $tags, $common_tags );
-        
-        // Remove duplicates and limit to 10
+
+        // Limit to 10 and make unique
         $tags = array_unique( $tags );
         $tags = array_slice( $tags, 0, 10 );
-        
+
+        // Create tags in WordPress
+        $tag_ids = array();
+        foreach ( $tags as $tag_name ) {
+            $term = term_exists( $tag_name, 'post_tag' );
+            if ( ! $term ) {
+                $result = wp_insert_term( $tag_name, 'post_tag' );
+                if ( ! is_wp_error( $result ) ) {
+                    $tag_ids[] = $result['term_id'];
+                }
+            } else {
+                $tag_ids[] = is_array( $term ) ? $term['term_id'] : $term;
+            }
+        }
+
         $this->draft_pack['tag_names'] = $tags;
-        
-        tsa_log_job( $this->job_id, 'Writer Agent: Generated ' . count( $tags ) . ' tags.' );
+        $this->draft_pack['tag_ids'] = $tag_ids;
+
+        tsa_log_job( $this->job_id, 'Writer Agent V2: Generated ' . count( $tags ) . ' tags.' );
     }
 
     /**
-     * Find internal links from existing posts
+     * Find internal links
      */
     private function find_internal_links() {
-        $keywords = $this->research_pack['keywords'] ?? array();
+        $title = $this->draft_pack['title'];
         $internal_links = array();
-        
-        // Search for related posts
-        foreach ( array_slice( $keywords, 0, 5 ) as $keyword ) {
-            $posts = get_posts( array(
-                'post_type' => 'post',
-                'post_status' => 'publish',
-                's' => $keyword,
-                'posts_per_page' => 2,
-            ) );
-            
-            foreach ( $posts as $post ) {
+
+        // Get related posts
+        $args = array(
+            'post_type' => 'post',
+            'post_status' => 'publish',
+            'posts_per_page' => 5,
+            's' => $title,
+            'orderby' => 'relevance',
+        );
+
+        $query = new \WP_Query( $args );
+
+        if ( $query->have_posts() ) {
+            while ( $query->have_posts() ) {
+                $query->the_post();
                 $internal_links[] = array(
-                    'id' => $post->ID,
-                    'title' => $post->post_title,
-                    'url' => get_permalink( $post->ID ),
-                    'keyword' => $keyword,
+                    'id' => get_the_ID(),
+                    'title' => get_the_title(),
+                    'url' => get_permalink(),
+                    'excerpt' => get_the_excerpt(),
                 );
             }
+            wp_reset_postdata();
         }
-        
-        // Remove duplicates
-        $unique_links = array();
-        $seen_ids = array();
-        foreach ( $internal_links as $link ) {
-            if ( ! in_array( $link['id'], $seen_ids, true ) ) {
-                $unique_links[] = $link;
-                $seen_ids[] = $link['id'];
-            }
-        }
-        
-        $this->draft_pack['internal_links'] = array_slice( $unique_links, 0, 5 );
-        
-        tsa_log_job( $this->job_id, 'Writer Agent: Found ' . count( $this->draft_pack['internal_links'] ) . ' internal link suggestions.' );
+
+        $this->draft_pack['internal_links'] = $internal_links;
+
+        tsa_log_job( $this->job_id, 'Writer Agent V2: Found ' . count( $internal_links ) . ' internal links.' );
     }
 
     /**
-     * Generate FAQ section
+     * Ensure FAQ section exists
      */
-    private function generate_faq() {
-        $title = $this->research_pack['title'];
-        $questions = $this->research_pack['faq_questions'] ?? array();
-        
-        $faq = array();
-        
-        // Generate answers for each question
-        foreach ( array_slice( $questions, 0, 5 ) as $question ) {
-            $answer = $this->generate_faq_answer( $question );
-            $faq[] = array(
-                'question' => $question,
-                'answer' => $answer,
-            );
+    private function ensure_faq_section() {
+        // Check if FAQ already in content
+        if ( stripos( $this->draft_pack['content'], 'FAQ' ) !== false ||
+             stripos( $this->draft_pack['content'], 'Pertanyaan' ) !== false ) {
+            return;
         }
-        
-        $this->draft_pack['faq'] = $faq;
-    }
 
-    /**
-     * Generate FAQ answer
-     *
-     * @param string $question Question
-     * @return string
-     */
-    private function generate_faq_answer( $question ) {
-        $title = $this->research_pack['title'];
-        $question_lower = strtolower( $question );
-        
-        // Pattern-based answers
-        if ( strpos( $question_lower, 'harga' ) !== false || strpos( $question_lower, 'tiket' ) !== false ) {
-            $price = $this->research_pack['pricing_info'] ?? '';
-            if ( ! empty( $price ) ) {
-                return "Harga tiket masuk {$title} adalah {$price}. Harga dapat berubah sewaktu-waktu, disarankan untuk mengecek informasi terbaru sebelum berkunjung.";
-            }
-            return "Untuk informasi harga tiket terbaru, silakan hubungi pihak pengelola atau cek media sosial resmi {$title}.";
-        }
-        
-        if ( strpos( $question_lower, 'jam' ) !== false || strpos( $question_lower, 'buka' ) !== false ) {
-            $hours = $this->research_pack['hours_info'] ?? '';
-            if ( ! empty( $hours ) ) {
-                return "{$title} buka pada {$hours}. Disarankan untuk datang di pagi hari untuk menghindari keramaian.";
-            }
-            return "Jam operasional dapat bervariasi. Silakan hubungi pihak pengelola untuk informasi jam buka terkini.";
-        }
-        
-        if ( strpos( $question_lower, 'cara' ) !== false || strpos( $question_lower, 'menuju' ) !== false ) {
-            $location = $this->research_pack['location_info'] ?? '';
-            if ( ! empty( $location ) ) {
-                return "{$title} berlokasi di {$location}. Anda bisa menggunakan kendaraan pribadi atau transportasi umum untuk mencapai lokasi ini.";
-            }
-            return "Anda bisa menggunakan aplikasi navigasi seperti Google Maps untuk panduan rute menuju {$title}.";
-        }
-        
-        // Default answer
-        return "Untuk informasi lebih detail, silakan baca artikel lengkap di atas atau hubungi pihak pengelola {$title}.";
+        // Add FAQ section
+        $title = $this->draft_pack['title'];
+        $faq_section = "\n\n## Pertanyaan yang Sering Diajukan (FAQ)\n\n";
+        $faq_section .= "### Apakah {$title} cocok untuk anak-anak?\n";
+        $faq_section .= "Ya, destinasi ini ramah anak dan cocok untuk liburan keluarga.\n\n";
+        $faq_section .= "### Kapan waktu terbaik untuk berkunjung?\n";
+        $faq_section .= "Waktu terbaik adalah di pagi hari atau hari kerja untuk menghindari keramaian.\n\n";
+        $faq_section .= "### Apakah ada penginapan di dekat lokasi?\n";
+        $faq_section .= "Ya, tersedia berbagai pilihan penginapan dengan berbagai range harga di sekitar lokasi.\n";
+
+        $this->draft_pack['content'] .= $faq_section;
+
+        // Store FAQ for schema
+        $this->draft_pack['faq'] = array(
+            array(
+                'question' => "Apakah {$title} cocok untuk anak-anak?",
+                'answer' => 'Ya, destinasi ini ramah anak dan cocok untuk liburan keluarga.',
+            ),
+            array(
+                'question' => 'Kapan waktu terbaik untuk berkunjung?',
+                'answer' => 'Waktu terbaik adalah di pagi hari atau hari kerja untuk menghindari keramaian.',
+            ),
+            array(
+                'question' => 'Apakah ada penginapan di dekat lokasi?',
+                'answer' => 'Ya, tersedia berbagai pilihan penginapan dengan berbagai range harga di sekitar lokasi.',
+            ),
+        );
     }
 
     /**
      * Generate schema data
      */
     private function generate_schema() {
-        $title = $this->research_pack['title'];
-        
+        $title = $this->draft_pack['title'];
+        $year = date( 'Y' );
+
+        // Article schema
         $schema = array(
             '@context' => 'https://schema.org',
-            '@type' => 'TouristAttraction',
-            'name' => $title,
+            '@type' => 'Article',
+            'headline' => $this->draft_pack['meta_title'],
             'description' => $this->draft_pack['meta_description'],
+            'datePublished' => current_time( 'c' ),
+            'dateModified' => current_time( 'c' ),
+            'author' => array(
+                '@type' => 'Organization',
+                'name' => get_bloginfo( 'name' ),
+            ),
+            'publisher' => array(
+                '@type' => 'Organization',
+                'name' => get_bloginfo( 'name' ),
+            ),
         );
-        
-        if ( ! empty( $this->research_pack['location_info'] ) ) {
-            $schema['address'] = array(
-                '@type' => 'PostalAddress',
-                'addressLocality' => $this->research_pack['location_info'],
-                'addressCountry' => 'ID',
-            );
-        }
-        
-        if ( ! empty( $this->research_pack['hours_info'] ) ) {
-            $schema['openingHours'] = $this->research_pack['hours_info'];
-        }
-        
-        // Add FAQ schema
+
+        // Add FAQ schema if available
         if ( ! empty( $this->draft_pack['faq'] ) ) {
             $faq_schema = array(
                 '@context' => 'https://schema.org',
                 '@type' => 'FAQPage',
                 'mainEntity' => array(),
             );
-            
-            foreach ( $this->draft_pack['faq'] as $item ) {
+
+            foreach ( $this->draft_pack['faq'] as $faq ) {
                 $faq_schema['mainEntity'][] = array(
                     '@type' => 'Question',
-                    'name' => $item['question'],
+                    'name' => $faq['question'],
                     'acceptedAnswer' => array(
                         '@type' => 'Answer',
-                        'text' => $item['answer'],
+                        'text' => $faq['answer'],
                     ),
                 );
             }
-            
-            $this->draft_pack['schema_data'] = array(
-                'tourist_attraction' => $schema,
-                'faq' => $faq_schema,
-            );
-        } else {
-            $this->draft_pack['schema_data'] = array(
-                'tourist_attraction' => $schema,
-            );
+
+            $this->draft_pack['schema_data']['faq'] = $faq_schema;
         }
+
+        $this->draft_pack['schema_data']['article'] = $schema;
+
+        tsa_log_job( $this->job_id, 'Writer Agent V2: Generated schema data.' );
     }
 
     /**
-     * Enhance outline with AI
-     *
-     * @param array $outline Default outline
-     * @return array
+     * Generate image suggestions
      */
-    private function enhance_outline_with_ai( $outline ) {
-        // For now, return default outline
-        // AI enhancement can be added here
-        return $outline;
+    private function generate_image_suggestions() {
+        $title = $this->draft_pack['title'];
+        $suggestions = array();
+
+        // Suggest images for each major section
+        $sections = array(
+            'header' => "Foto utama {$title} - pemandangan terbaik",
+            'overview' => "Panorama {$title} dari kejauhan",
+            'location' => "Peta lokasi atau foto pintu masuk {$title}",
+            'activities' => "Aktivitas wisatawan di {$title}",
+            'facilities' => "Fasilitas yang tersedia di {$title}",
+            'tips' => "Infografis tips berkunjung ke {$title}",
+        );
+
+        foreach ( $sections as $section => $suggestion ) {
+            $suggestions[] = array(
+                'section' => $section,
+                'suggestion' => $suggestion,
+                'search_query' => "{$title} {$section}",
+            );
+        }
+
+        $this->draft_pack['image_suggestions'] = $suggestions;
+
+        tsa_log_job( $this->job_id, 'Writer Agent V2: Generated ' . count( $suggestions ) . ' image suggestions.' );
+    }
+
+    /**
+     * Convert Markdown content to HTML
+     */
+    private function convert_to_html() {
+        $content = $this->draft_pack['content'];
+
+        // Simple Markdown to HTML conversion
+        // Headers
+        $content = preg_replace( '/^### (.+)$/m', '<h3>$1</h3>', $content );
+        $content = preg_replace( '/^## (.+)$/m', '<h2>$1</h2>', $content );
+        $content = preg_replace( '/^# (.+)$/m', '<h1>$1</h1>', $content );
+
+        // Bold and italic
+        $content = preg_replace( '/\*\*(.+?)\*\*/', '<strong>$1</strong>', $content );
+        $content = preg_replace( '/\*(.+?)\*/', '<em>$1</em>', $content );
+
+        // Lists
+        $content = preg_replace( '/^- (.+)$/m', '<li>$1</li>', $content );
+        $content = preg_replace( '/(<li>.*<\/li>\n)+/', '<ul>$0</ul>', $content );
+
+        // Horizontal rules
+        $content = preg_replace( '/^---$/m', '<hr>', $content );
+
+        // Tables (basic support)
+        $content = $this->convert_markdown_tables( $content );
+
+        // Paragraphs
+        $content = preg_replace( '/^([^<\n].+)$/m', '<p>$1</p>', $content );
+
+        // Clean up
+        $content = preg_replace( '/<p><\/p>/', '', $content );
+        $content = preg_replace( '/\n{3,}/', "\n\n", $content );
+
+        $this->draft_pack['content_html'] = $content;
+    }
+
+    /**
+     * Convert Markdown tables to HTML
+     *
+     * @param string $content Content with Markdown tables
+     * @return string Content with HTML tables
+     */
+    private function convert_markdown_tables( $content ) {
+        // Match Markdown tables
+        $pattern = '/\|(.+)\|\n\|[-:| ]+\|\n((?:\|.+\|\n?)+)/';
+
+        return preg_replace_callback( $pattern, function( $matches ) {
+            $header = trim( $matches[1] );
+            $rows = trim( $matches[2] );
+
+            // Parse header
+            $header_cells = array_map( 'trim', explode( '|', $header ) );
+            $header_html = '<tr>';
+            foreach ( $header_cells as $cell ) {
+                if ( ! empty( $cell ) ) {
+                    $header_html .= '<th>' . esc_html( $cell ) . '</th>';
+                }
+            }
+            $header_html .= '</tr>';
+
+            // Parse rows
+            $rows_html = '';
+            $row_lines = explode( "\n", $rows );
+            foreach ( $row_lines as $row ) {
+                $row = trim( $row, '|' );
+                $cells = array_map( 'trim', explode( '|', $row ) );
+                $rows_html .= '<tr>';
+                foreach ( $cells as $cell ) {
+                    $rows_html .= '<td>' . esc_html( $cell ) . '</td>';
+                }
+                $rows_html .= '</tr>';
+            }
+
+            return '<table class="tsa-article-table"><thead>' . $header_html . '</thead><tbody>' . $rows_html . '</tbody></table>';
+        }, $content );
     }
 
     /**
@@ -876,16 +738,7 @@ Gunakan heading H2 untuk setiap section utama. Tulis dengan gaya informatif namu
      * @return bool
      */
     private function has_ai_api() {
-        $api_key = tsa_get_option( 'openai_api_key', '' );
-        return ! empty( $api_key );
-    }
-
-    /**
-     * Get the draft pack
-     *
-     * @return array
-     */
-    public function get_draft_pack() {
-        return $this->draft_pack;
+        $settings = get_option( 'tsa_settings', array() );
+        return ! empty( $settings['openai_api_key'] ) || ! empty( $settings['deepseek_api_key'] );
     }
 }

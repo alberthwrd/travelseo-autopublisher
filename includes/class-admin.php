@@ -79,6 +79,7 @@ class Admin {
         wp_localize_script( $this->plugin_name, 'tsaAdmin', array(
             'ajaxurl' => admin_url( 'admin-ajax.php' ),
             'nonce' => wp_create_nonce( 'tsa_admin_nonce' ),
+            'updateNonce' => wp_create_nonce( 'tsa_update_nonce' ),
         ) );
 
 	}

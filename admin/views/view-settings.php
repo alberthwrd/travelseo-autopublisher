@@ -412,12 +412,56 @@ $settings = wp_parse_args( $settings, $defaults );
         </div>
 
         <!-- GitHub Update Settings -->
-        <div class="tsa-settings-section">
+        <div class="tsa-settings-section" id="github-update">
             <h2>
                 <span class="dashicons dashicons-update"></span>
                 GitHub Auto-Update Settings
             </h2>
             <p class="description">Configure automatic updates from your GitHub repository.</p>
+            
+            <!-- Update Notification Box -->
+            <div id="tsa-update-notification" class="tsa-update-box" style="display: none;">
+                <div class="tsa-update-header">
+                    <span class="dashicons dashicons-info"></span>
+                    <strong>Update Available!</strong>
+                </div>
+                <div class="tsa-update-content">
+                    <p>
+                        <strong>Current Version:</strong> <span id="tsa-current-ver"><?php echo esc_html( TSA_VERSION ); ?></span><br>
+                        <strong>Latest Version:</strong> <span id="tsa-latest-ver">-</span><br>
+                        <strong>Released:</strong> <span id="tsa-release-date">-</span>
+                    </p>
+                    <div class="tsa-update-actions">
+                        <button type="button" class="button button-primary" id="tsa-do-update">
+                            <span class="dashicons dashicons-update"></span>
+                            Update Now
+                        </button>
+                        <a href="#" id="tsa-view-changelog" class="button button-secondary">View Changelog</a>
+                        <a href="#" id="tsa-release-link" class="button button-link" target="_blank">View on GitHub</a>
+                    </div>
+                </div>
+                <div id="tsa-changelog-box" class="tsa-changelog" style="display: none;">
+                    <h4>Changelog</h4>
+                    <div id="tsa-changelog-content"></div>
+                </div>
+            </div>
+            
+            <!-- Up to Date Box -->
+            <div id="tsa-uptodate-notification" class="tsa-uptodate-box" style="display: none;">
+                <span class="dashicons dashicons-yes-alt"></span>
+                <strong>You're up to date!</strong> Version <?php echo esc_html( TSA_VERSION ); ?> is the latest version.
+            </div>
+            
+            <!-- Update Progress Box -->
+            <div id="tsa-update-progress" class="tsa-progress-box" style="display: none;">
+                <div class="tsa-progress-spinner">
+                    <span class="spinner is-active"></span>
+                </div>
+                <div class="tsa-progress-text">
+                    <strong id="tsa-progress-title">Updating...</strong>
+                    <p id="tsa-progress-message">Please wait while the plugin is being updated.</p>
+                </div>
+            </div>
             
             <table class="form-table">
                 <tr>
@@ -426,7 +470,7 @@ $settings = wp_parse_args( $settings, $defaults );
                     </th>
                     <td>
                         <input type="text" name="github_username" id="github_username" class="regular-text" 
-                               value="<?php echo esc_attr( $settings['github_username'] ); ?>" placeholder="your-username">
+                               value="<?php echo esc_attr( $settings['github_username'] ); ?>" placeholder="alberthwrd">
                     </td>
                 </tr>
                 <tr>
@@ -449,11 +493,19 @@ $settings = wp_parse_args( $settings, $defaults );
                     </td>
                 </tr>
                 <tr>
-                    <th scope="row">Current Version</th>
+                    <th scope="row">Version Status</th>
                     <td>
-                        <strong><?php echo esc_html( TSA_VERSION ); ?></strong>
-                        <button type="button" class="button button-secondary" id="tsa-check-update">Check for Updates</button>
-                        <span id="tsa-update-status"></span>
+                        <div class="tsa-version-info">
+                            <strong>Installed:</strong> v<?php echo esc_html( TSA_VERSION ); ?>
+                            <span id="tsa-version-badge" class="tsa-badge"></span>
+                        </div>
+                        <div class="tsa-version-actions">
+                            <button type="button" class="button button-secondary" id="tsa-check-update">
+                                <span class="dashicons dashicons-update"></span>
+                                Check for Updates
+                            </button>
+                            <span id="tsa-check-status"></span>
+                        </div>
                     </td>
                 </tr>
             </table>

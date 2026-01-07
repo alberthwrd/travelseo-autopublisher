@@ -7,6 +7,9 @@
 (function($) {
     'use strict';
 
+    // Update nonce (will be set from PHP)
+    var updateNonce = (typeof tsaAdmin !== 'undefined') ? tsaAdmin.updateNonce : '';
+
     /**
      * Initialize admin functionality
      */
@@ -15,6 +18,7 @@
         initBulkActions();
         initAutoRefresh();
         initConfirmDialogs();
+        initUpdateChecker();
     }
 
     /**
@@ -112,6 +116,180 @@
             var message = $(this).data('confirm');
             if (!confirm(message)) {
                 e.preventDefault();
+            }
+        });
+    }
+
+    /**
+     * Initialize Update Checker
+     */
+    function initUpdateChecker() {
+        // Get nonce from hidden field or generate
+        updateNonce = $('#tsa_update_nonce').val() || '';
+        
+        // Check for updates on settings page load
+        if ($('#github-update').length > 0) {
+            // Auto-check on page load (with slight delay)
+            setTimeout(function() {
+                checkForUpdates(true);
+            }, 500);
+        }
+        
+        // Check for Updates button
+        $('#tsa-check-update').on('click', function(e) {
+            e.preventDefault();
+            checkForUpdates(false);
+        });
+        
+        // Update Now button
+        $('#tsa-do-update').on('click', function(e) {
+            e.preventDefault();
+            doPluginUpdate();
+        });
+        
+        // View Changelog toggle
+        $('#tsa-view-changelog').on('click', function(e) {
+            e.preventDefault();
+            $('#tsa-changelog-box').slideToggle();
+        });
+    }
+
+    /**
+     * Check for updates
+     */
+    function checkForUpdates(silent) {
+        var $btn = $('#tsa-check-update');
+        var $status = $('#tsa-check-status');
+        
+        if (!silent) {
+            $btn.prop('disabled', true);
+            $status.html('<span class="spinner is-active" style="float:none;margin:0 5px;"></span> Checking...');
+        }
+        
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'tsa_force_update_check',
+                nonce: updateNonce || $('#_wpnonce').val()
+            },
+            success: function(response) {
+                if (response.success) {
+                    displayUpdateInfo(response.data.info);
+                    if (!silent) {
+                        $status.html('<span style="color:green;">✓ Check complete</span>');
+                        setTimeout(function() {
+                            $status.html('');
+                        }, 3000);
+                    }
+                } else {
+                    if (!silent) {
+                        $status.html('<span style="color:red;">✗ ' + (response.data.message || 'Check failed') + '</span>');
+                    }
+                }
+            },
+            error: function() {
+                if (!silent) {
+                    $status.html('<span style="color:red;">✗ Connection error</span>');
+                }
+            },
+            complete: function() {
+                $btn.prop('disabled', false);
+            }
+        });
+    }
+
+    /**
+     * Display update information
+     */
+    function displayUpdateInfo(info) {
+        var $notification = $('#tsa-update-notification');
+        var $uptodate = $('#tsa-uptodate-notification');
+        var $badge = $('#tsa-version-badge');
+        
+        // Hide both first
+        $notification.hide();
+        $uptodate.hide();
+        
+        if (!info.github_connected) {
+            $badge.html('<span class="tsa-badge-warning">Not Connected</span>');
+            return;
+        }
+        
+        if (info.update_available) {
+            // Show update notification
+            $('#tsa-latest-ver').text('v' + info.latest_version);
+            $('#tsa-release-date').text(info.release_date_formatted || 'Unknown');
+            $('#tsa-changelog-content').html(info.release_notes_html || '<p>No changelog available.</p>');
+            $('#tsa-release-link').attr('href', info.release_url || '#');
+            
+            $notification.slideDown();
+            $badge.html('<span class="tsa-badge-update">Update Available: v' + info.latest_version + '</span>');
+        } else {
+            // Show up to date message
+            $uptodate.slideDown();
+            $badge.html('<span class="tsa-badge-ok">Up to Date</span>');
+        }
+    }
+
+    /**
+     * Perform plugin update
+     */
+    function doPluginUpdate() {
+        var $btn = $('#tsa-do-update');
+        var $progress = $('#tsa-update-progress');
+        var $notification = $('#tsa-update-notification');
+        
+        // Confirm
+        if (!confirm('Are you sure you want to update the plugin now? The page will reload after the update.')) {
+            return;
+        }
+        
+        // Show progress
+        $btn.prop('disabled', true);
+        $notification.hide();
+        $progress.show();
+        
+        $('#tsa-progress-title').text('Downloading update...');
+        $('#tsa-progress-message').text('Please wait while the plugin is being updated. Do not close this page.');
+        
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'tsa_do_plugin_update',
+                nonce: updateNonce || $('#_wpnonce').val()
+            },
+            timeout: 120000, // 2 minutes timeout
+            success: function(response) {
+                if (response.success) {
+                    $('#tsa-progress-title').text('Update Complete!');
+                    $('#tsa-progress-message').html(
+                        '<span style="color:green;">✓ ' + response.data.message + '</span><br>' +
+                        'Reloading page in 3 seconds...'
+                    );
+                    
+                    // Reload page
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 3000);
+                } else {
+                    $('#tsa-progress-title').text('Update Failed');
+                    $('#tsa-progress-message').html(
+                        '<span style="color:red;">✗ ' + (response.data.message || 'Unknown error') + '</span><br>' +
+                        '<button type="button" class="button" onclick="location.reload()">Reload Page</button>'
+                    );
+                    $progress.find('.spinner').removeClass('is-active');
+                }
+            },
+            error: function(xhr, status, error) {
+                $('#tsa-progress-title').text('Update Failed');
+                $('#tsa-progress-message').html(
+                    '<span style="color:red;">✗ Connection error: ' + error + '</span><br>' +
+                    'Please try again or update manually.<br>' +
+                    '<button type="button" class="button" onclick="location.reload()">Reload Page</button>'
+                );
+                $progress.find('.spinner').removeClass('is-active');
             }
         });
     }

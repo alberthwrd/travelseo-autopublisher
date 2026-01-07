@@ -793,3 +793,203 @@
         font-size: 12px;
     }
 }
+
+
+/* ==========================================================================
+   GitHub Update Notification
+   ========================================================================== */
+
+.tsa-update-box {
+    background: linear-gradient(135deg, #fff8e5 0%, #fff3cd 100%);
+    border: 1px solid #ffc107;
+    border-left: 4px solid #ffc107;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.tsa-update-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    font-size: 16px;
+}
+
+.tsa-update-header .dashicons {
+    color: #856404;
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+}
+
+.tsa-update-content p {
+    margin: 0 0 15px 0;
+    line-height: 1.8;
+}
+
+.tsa-update-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.tsa-update-actions .button-primary {
+    background: #2271b1;
+    border-color: #2271b1;
+}
+
+.tsa-update-actions .button-primary:hover {
+    background: #135e96;
+    border-color: #135e96;
+}
+
+.tsa-update-actions .button-primary .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    margin-right: 5px;
+}
+
+.tsa-uptodate-box {
+    background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+    border: 1px solid #4caf50;
+    border-left: 4px solid #4caf50;
+    border-radius: 4px;
+    padding: 15px 20px;
+    margin: 20px 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.tsa-uptodate-box .dashicons {
+    color: #2e7d32;
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+}
+
+.tsa-progress-box {
+    background: #f0f6fc;
+    border: 1px solid #2271b1;
+    border-left: 4px solid #2271b1;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 20px 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+}
+
+.tsa-progress-spinner {
+    flex-shrink: 0;
+}
+
+.tsa-progress-spinner .spinner {
+    float: none;
+    margin: 0;
+}
+
+.tsa-progress-text strong {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 14px;
+}
+
+.tsa-progress-text p {
+    margin: 0;
+    color: #646970;
+}
+
+.tsa-changelog {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 15px;
+    margin-top: 15px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.tsa-changelog h4 {
+    margin: 0 0 10px 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.tsa-changelog ul {
+    margin: 10px 0;
+    padding-left: 20px;
+}
+
+.tsa-changelog li {
+    margin-bottom: 5px;
+}
+
+/* Version Badges */
+.tsa-version-info {
+    margin-bottom: 10px;
+}
+
+.tsa-version-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.tsa-version-actions .button .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    margin-right: 3px;
+}
+
+.tsa-badge {
+    display: inline-block;
+    margin-left: 10px;
+}
+
+.tsa-badge-ok {
+    background: #00a32a;
+    color: #fff;
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.tsa-badge-update {
+    background: #dba617;
+    color: #fff;
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+    animation: pulse 2s infinite;
+}
+
+.tsa-badge-warning {
+    background: #d63638;
+    color: #fff;
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
+/* Check status spinner */
+#tsa-check-status .spinner {
+    float: none;
+    margin: 0;
+    vertical-align: middle;
+}

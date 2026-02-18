@@ -1,0 +1,995 @@
+/**
+ * TravelSEO Autopublisher Admin Styles
+ *
+ * @package TravelSEO_Autopublisher
+ */
+
+/* ==========================================================================
+   General Styles
+   ========================================================================== */
+
+.tsa-dashboard,
+.tsa-new-campaign,
+.tsa-jobs-list,
+.tsa-job-detail,
+.tsa-settings {
+    max-width: 1400px;
+}
+
+/* ==========================================================================
+   Statistics Cards
+   ========================================================================== */
+
+.tsa-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 20px;
+    margin: 20px 0;
+}
+
+.tsa-stat-card {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    transition: box-shadow 0.2s;
+}
+
+.tsa-stat-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.tsa-stat-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tsa-stat-icon .dashicons {
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+    color: #fff;
+}
+
+.tsa-stat-total .tsa-stat-icon { background: #2271b1; }
+.tsa-stat-queued .tsa-stat-icon { background: #72aee6; }
+.tsa-stat-processing .tsa-stat-icon { background: #dba617; }
+.tsa-stat-ready .tsa-stat-icon { background: #00a32a; }
+.tsa-stat-pushed .tsa-stat-icon { background: #135e96; }
+.tsa-stat-failed .tsa-stat-icon { background: #d63638; }
+
+.tsa-stat-number {
+    font-size: 32px;
+    font-weight: 600;
+    line-height: 1;
+    color: #1d2327;
+}
+
+.tsa-stat-label {
+    font-size: 13px;
+    color: #646970;
+    margin-top: 4px;
+}
+
+/* ==========================================================================
+   Quick Actions
+   ========================================================================== */
+
+.tsa-quick-actions {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.tsa-quick-actions h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #c3c4c7;
+}
+
+.tsa-action-buttons {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin-top: 15px;
+}
+
+.tsa-action-buttons .button-hero {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tsa-action-buttons .dashicons {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+}
+
+/* ==========================================================================
+   Status Badges
+   ========================================================================== */
+
+.tsa-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.tsa-status-queued {
+    background: #e7f3ff;
+    color: #2271b1;
+}
+
+.tsa-status-researching,
+.tsa-status-drafting {
+    background: #e7f3ff;
+    color: #2271b1;
+}
+
+.tsa-status-qa,
+.tsa-status-image_planning {
+    background: #fff8e5;
+    color: #996800;
+}
+
+.tsa-status-ready {
+    background: #edfaef;
+    color: #00a32a;
+}
+
+.tsa-status-pushed {
+    background: #e5f5fa;
+    color: #135e96;
+}
+
+.tsa-status-failed {
+    background: #fcf0f1;
+    color: #d63638;
+}
+
+/* ==========================================================================
+   Progress Bar
+   ========================================================================== */
+
+.tsa-progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #dcdcde;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.tsa-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #2271b1, #72aee6);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.tsa-progress-fill.failed {
+    background: #d63638;
+}
+
+.tsa-progress-text {
+    font-size: 11px;
+    color: #646970;
+    margin-top: 2px;
+    display: block;
+}
+
+/* ==========================================================================
+   Tables
+   ========================================================================== */
+
+.tsa-recent-jobs,
+.tsa-system-status {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.tsa-recent-jobs h2,
+.tsa-system-status h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #c3c4c7;
+}
+
+/* ==========================================================================
+   Empty State
+   ========================================================================== */
+
+.tsa-empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #646970;
+}
+
+.tsa-empty-state .dashicons {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    color: #c3c4c7;
+    margin-bottom: 15px;
+}
+
+.tsa-empty-state p {
+    font-size: 14px;
+    margin-bottom: 20px;
+}
+
+/* ==========================================================================
+   Form Sections
+   ========================================================================== */
+
+.tsa-form-section {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.tsa-form-section h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #c3c4c7;
+}
+
+.tsa-form-actions {
+    margin: 30px 0;
+    display: flex;
+    gap: 15px;
+}
+
+.tsa-bulk-import {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #c3c4c7;
+}
+
+/* ==========================================================================
+   Filters
+   ========================================================================== */
+
+.tsa-filters {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 15px;
+    margin: 20px 0;
+}
+
+.tsa-filters form {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.tsa-filters select,
+.tsa-filters input[type="search"] {
+    min-width: 150px;
+}
+
+/* ==========================================================================
+   Job Detail Page
+   ========================================================================== */
+
+.tsa-back-link {
+    text-decoration: none;
+    color: #2271b1;
+    margin-right: 10px;
+}
+
+.tsa-status-bar {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 15px 20px;
+    margin: 20px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.tsa-status-info {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.tsa-meta {
+    color: #646970;
+    font-size: 13px;
+}
+
+.tsa-status-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* Progress Steps */
+.tsa-progress-steps {
+    display: flex;
+    justify-content: space-between;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 30px;
+    margin: 20px 0;
+    position: relative;
+}
+
+.tsa-progress-steps::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 60px;
+    right: 60px;
+    height: 2px;
+    background: #dcdcde;
+    transform: translateY(-50%);
+    z-index: 0;
+}
+
+.tsa-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+}
+
+.tsa-step-indicator {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #dcdcde;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    color: #646970;
+    margin-bottom: 10px;
+}
+
+.tsa-step.completed .tsa-step-indicator {
+    background: #00a32a;
+    border-color: #00a32a;
+    color: #fff;
+}
+
+.tsa-step.active .tsa-step-indicator {
+    background: #2271b1;
+    border-color: #2271b1;
+    color: #fff;
+    animation: pulse 2s infinite;
+}
+
+.tsa-step.failed .tsa-step-indicator {
+    background: #d63638;
+    border-color: #d63638;
+    color: #fff;
+}
+
+.tsa-step-label {
+    font-size: 12px;
+    color: #646970;
+    text-align: center;
+}
+
+.tsa-step.completed .tsa-step-label,
+.tsa-step.active .tsa-step-label {
+    color: #1d2327;
+    font-weight: 500;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+/* Tabs */
+.tsa-tabs {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    margin: 20px 0;
+}
+
+.tsa-tab-nav {
+    display: flex;
+    border-bottom: 1px solid #c3c4c7;
+    background: #f6f7f7;
+}
+
+.tsa-tab-link {
+    padding: 12px 20px;
+    text-decoration: none;
+    color: #646970;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all 0.2s;
+}
+
+.tsa-tab-link:hover {
+    color: #2271b1;
+    background: #fff;
+}
+
+.tsa-tab-link.active {
+    color: #2271b1;
+    background: #fff;
+    border-bottom-color: #2271b1;
+}
+
+.tsa-tab-content {
+    display: none;
+    padding: 20px;
+}
+
+.tsa-tab-content.active {
+    display: block;
+}
+
+/* Preview */
+.tsa-preview-header {
+    border-bottom: 1px solid #c3c4c7;
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+}
+
+.tsa-preview-header h2 {
+    margin: 0 0 10px;
+    font-size: 24px;
+}
+
+.tsa-meta-desc {
+    color: #646970;
+    font-style: italic;
+}
+
+.tsa-preview-content {
+    line-height: 1.8;
+}
+
+.tsa-preview-content h2 {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid #eee;
+}
+
+.tsa-preview-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+}
+
+/* Tags */
+.tsa-tag {
+    display: inline-block;
+    background: #f0f0f1;
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    margin: 2px;
+}
+
+.tsa-char-count {
+    color: #646970;
+    font-size: 12px;
+}
+
+/* Sources List */
+.tsa-sources-list li {
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
+}
+
+.tsa-sources-list a {
+    word-break: break-all;
+}
+
+/* Keywords */
+.tsa-keywords {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+/* Image Recommendations */
+.tsa-image-recommendations {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.tsa-image-rec {
+    background: #f6f7f7;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 15px;
+}
+
+.tsa-image-rec h4 {
+    margin-top: 0;
+}
+
+.tsa-fetched-image img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+}
+
+/* QA Score */
+.tsa-qa-score {
+    text-align: center;
+    padding: 30px;
+}
+
+.tsa-score-circle {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 4px solid;
+}
+
+.tsa-score-circle.good {
+    border-color: #00a32a;
+    color: #00a32a;
+}
+
+.tsa-score-circle.poor {
+    border-color: #d63638;
+    color: #d63638;
+}
+
+.tsa-score-circle .score {
+    font-size: 36px;
+    font-weight: 700;
+}
+
+.tsa-score-circle .label {
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+/* Improvements & Warnings */
+.tsa-improvements li,
+.tsa-warnings li {
+    margin-bottom: 8px;
+}
+
+.tsa-warnings li {
+    color: #d63638;
+}
+
+/* Log Viewer */
+.tsa-log-viewer {
+    background: #1d2327;
+    color: #f0f0f1;
+    padding: 20px;
+    border-radius: 4px;
+    max-height: 400px;
+    overflow: auto;
+}
+
+.tsa-log-viewer pre {
+    margin: 0;
+    white-space: pre-wrap;
+    font-family: monospace;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+/* FAQ Section */
+.tsa-faq-section {
+    margin-top: 30px;
+}
+
+.tsa-faq-item {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f6f7f7;
+    border-radius: 4px;
+}
+
+.tsa-faq-item h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+/* ==========================================================================
+   Settings Page
+   ========================================================================== */
+
+.tsa-settings-section {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.tsa-settings-section h2 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #c3c4c7;
+}
+
+.tsa-settings-section h2 .dashicons {
+    color: #2271b1;
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+/* ==========================================================================
+   Toggle Switch for Feature Flags
+   ========================================================================== */
+
+.tsa-toggle {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 26px;
+}
+
+.tsa-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.tsa-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .3s;
+    border-radius: 26px;
+}
+
+.tsa-toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .3s;
+    border-radius: 50%;
+}
+
+.tsa-toggle input:checked + .tsa-toggle-slider {
+    background-color: #2271b1;
+}
+
+.tsa-toggle input:focus + .tsa-toggle-slider {
+    box-shadow: 0 0 1px #2271b1;
+}
+
+.tsa-toggle input:checked + .tsa-toggle-slider:before {
+    transform: translateX(24px);
+}
+
+.tsa-feature-flags tr {
+    border-bottom: 1px solid #eee;
+}
+
+.tsa-feature-flags th {
+    font-weight: 500;
+    color: #1d2327;
+}
+
+.tsa-feature-flags td {
+    padding: 15px 10px;
+}
+
+.tsa-feature-flags .description {
+    margin-top: 5px;
+    margin-left: 60px;
+}
+
+/* Update Check Button */
+#tsa-check-update {
+    margin-left: 10px;
+}
+
+#tsa-update-status {
+    margin-left: 10px;
+    font-style: italic;
+}
+
+#tsa-update-status.success {
+    color: #00a32a;
+}
+
+#tsa-update-status.error {
+    color: #d63638;
+}
+
+/* Version Badge */
+.tsa-version-badge {
+    display: inline-block;
+    background: #f0f0f1;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    margin-left: 10px;
+}
+
+.tsa-version-badge.update-available {
+    background: #fcf0f1;
+    color: #d63638;
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media screen and (max-width: 782px) {
+    .tsa-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .tsa-status-bar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .tsa-progress-steps {
+        flex-wrap: wrap;
+        gap: 20px;
+    }
+    
+    .tsa-progress-steps::before {
+        display: none;
+    }
+    
+    .tsa-tab-nav {
+        flex-wrap: wrap;
+    }
+    
+    .tsa-tab-link {
+        flex: 1 1 auto;
+        text-align: center;
+        padding: 10px;
+        font-size: 12px;
+    }
+}
+
+
+/* ==========================================================================
+   GitHub Update Notification
+   ========================================================================== */
+
+.tsa-update-box {
+    background: linear-gradient(135deg, #fff8e5 0%, #fff3cd 100%);
+    border: 1px solid #ffc107;
+    border-left: 4px solid #ffc107;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.tsa-update-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    font-size: 16px;
+}
+
+.tsa-update-header .dashicons {
+    color: #856404;
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+}
+
+.tsa-update-content p {
+    margin: 0 0 15px 0;
+    line-height: 1.8;
+}
+
+.tsa-update-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.tsa-update-actions .button-primary {
+    background: #2271b1;
+    border-color: #2271b1;
+}
+
+.tsa-update-actions .button-primary:hover {
+    background: #135e96;
+    border-color: #135e96;
+}
+
+.tsa-update-actions .button-primary .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    margin-right: 5px;
+}
+
+.tsa-uptodate-box {
+    background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+    border: 1px solid #4caf50;
+    border-left: 4px solid #4caf50;
+    border-radius: 4px;
+    padding: 15px 20px;
+    margin: 20px 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.tsa-uptodate-box .dashicons {
+    color: #2e7d32;
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+}
+
+.tsa-progress-box {
+    background: #f0f6fc;
+    border: 1px solid #2271b1;
+    border-left: 4px solid #2271b1;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 20px 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+}
+
+.tsa-progress-spinner {
+    flex-shrink: 0;
+}
+
+.tsa-progress-spinner .spinner {
+    float: none;
+    margin: 0;
+}
+
+.tsa-progress-text strong {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 14px;
+}
+
+.tsa-progress-text p {
+    margin: 0;
+    color: #646970;
+}
+
+.tsa-changelog {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 15px;
+    margin-top: 15px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.tsa-changelog h4 {
+    margin: 0 0 10px 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.tsa-changelog ul {
+    margin: 10px 0;
+    padding-left: 20px;
+}
+
+.tsa-changelog li {
+    margin-bottom: 5px;
+}
+
+/* Version Badges */
+.tsa-version-info {
+    margin-bottom: 10px;
+}
+
+.tsa-version-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.tsa-version-actions .button .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    margin-right: 3px;
+}
+
+.tsa-badge {
+    display: inline-block;
+    margin-left: 10px;
+}
+
+.tsa-badge-ok {
+    background: #00a32a;
+    color: #fff;
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.tsa-badge-update {
+    background: #dba617;
+    color: #fff;
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+    animation: pulse 2s infinite;
+}
+
+.tsa-badge-warning {
+    background: #d63638;
+    color: #fff;
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
+/* Check status spinner */
+#tsa-check-status .spinner {
+    float: none;
+    margin: 0;
+    vertical-align: middle;
+}

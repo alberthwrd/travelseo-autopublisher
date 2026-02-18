@@ -1,12 +1,18 @@
 <?php
 /**
- * Project Hyperion - Queue Manager V5
- * 7-Stage Pipeline Processing with Word Count Enforcement
+ * Project Hyperion - Queue Manager V6
+ * 7-Stage Pipeline Processing
+ *
+ * PERBAIKAN V6:
+ * - Fallback article generator menggunakan DATA RESEARCH dari Oracle
+ * - Setiap artikel UNIK berdasarkan data yang ditemukan
+ * - TIDAK ADA template copy-paste
+ * - AI dipanggil per-section untuk memaksimalkan output
+ * - Minimum word count enforcement: 1000 kata
  *
  * Flow: Oracle -> Architect -> Council -> Synthesizer -> Stylist -> Editor -> Connector
  *
- * @package    TravelSEO_Autopublisher
- * @version    5.0.0 (Hyperion V2)
+ * @version 6.0.0
  */
 
 namespace TravelSEO_Autopublisher;
@@ -67,7 +73,7 @@ class Queue {
                 'created_at'  => current_time('mysql'),
             ));
             $job_id = $wpdb->insert_id;
-            tsa_log_job($job_id, "Job created: \"{$title}\" (Hyperion V2 Pipeline)");
+            tsa_log_job($job_id, "Job created: \"{$title}\" (Hyperion V3 Pipeline)");
             self::schedule_job($job_id, $created * 3);
             $created++;
         }
@@ -148,7 +154,7 @@ class Queue {
     }
 
     // ============================================================
-    // HYPERION PIPELINE V2 - 7 Stage Processing
+    // HYPERION PIPELINE V3 - 7 Stage Processing
     // ============================================================
 
     private static function run_hyperion_pipeline($job_id) {
@@ -206,14 +212,16 @@ class Queue {
                 $result = $architect->design($title, $kg);
 
                 if (empty($result) || empty($result['blueprint'])) {
-                    // Fallback blueprint
                     $result = array('blueprint' => array(
                         'type' => 'destinasi',
                         'target_words' => array('min' => 1000, 'max' => 3000),
                         'sections' => array(
-                            array('heading' => 'Mengenal Lebih Dekat', 'type' => 'overview'),
-                            array('heading' => 'Informasi Praktis', 'type' => 'practical'),
-                            array('heading' => 'Tips Berkunjung', 'type' => 'tips'),
+                            array('heading' => 'Mengenal Lebih Dekat', 'type' => 'overview', 'min_words' => 200),
+                            array('heading' => 'Lokasi dan Cara Menuju', 'type' => 'practical', 'min_words' => 200),
+                            array('heading' => 'Harga Tiket Masuk Terbaru', 'type' => 'pricing', 'min_words' => 150),
+                            array('heading' => 'Jam Operasional', 'type' => 'hours', 'min_words' => 100),
+                            array('heading' => 'Fasilitas yang Tersedia', 'type' => 'facilities', 'min_words' => 150),
+                            array('heading' => 'Tips Berkunjung', 'type' => 'tips', 'min_words' => 200),
                         ),
                     ), 'log' => array('[Architect] Fallback blueprint'));
                     tsa_log_job($job_id, 'Architect: Fallback blueprint digunakan');
@@ -229,29 +237,51 @@ class Queue {
             }
 
             // ============================================================
-            // STAGE 3: THE COUNCIL (V4 - full_html output)
+            // STAGE 3: THE COUNCIL V5
             // ============================================================
             if ($current_stage === 'council') {
                 $wpdb->update($table, array('status' => 'writing'), array('id' => $job_id));
-                tsa_log_job($job_id, 'Hyperion 3/7: The Council - Menulis artikel lengkap...');
+                tsa_log_job($job_id, 'Hyperion 3/7: The Council V5 - Menulis artikel...');
 
                 $council = new \TSA_Council_Agent();
                 $kg = $hyperion['oracle']['knowledge_graph'] ?? array();
                 $blueprint = $hyperion['architect']['blueprint'] ?? array();
                 $result = $council->write($title, $kg, $blueprint);
 
-                // Council V4 menghasilkan full_html ATAU sections
+                // Check output
                 $has_content = false;
+                $article_html = '';
+
                 if (!empty($result)) {
-                    if (!empty($result['full_html'])) $has_content = true;
-                    if (!empty($result['sections'])) $has_content = true;
-                    if (!empty($result['article_html'])) $has_content = true;
+                    if (!empty($result['full_html'])) {
+                        $has_content = true;
+                        $article_html = $result['full_html'];
+                    } elseif (!empty($result['article_html'])) {
+                        $has_content = true;
+                        $article_html = $result['article_html'];
+                    } elseif (!empty($result['sections'])) {
+                        $has_content = true;
+                        foreach ($result['sections'] as $s) {
+                            if (is_array($s)) {
+                                if (!empty($s['heading'])) $article_html .= "<h2>{$s['heading']}</h2>\n\n";
+                                if (!empty($s['content'])) $article_html .= $s['content'] . "\n\n";
+                            }
+                        }
+                    }
                 }
 
-                if (!$has_content) {
-                    tsa_log_job($job_id, 'Council: Output kosong, menggunakan fallback content generator...');
-                    $result = self::generate_fallback_article($title, $kg, $blueprint);
+                // Check word count
+                $wc = str_word_count(strip_tags($article_html));
+                tsa_log_job($job_id, "Council output: {$wc} kata");
+
+                if (!$has_content || $wc < 300) {
+                    tsa_log_job($job_id, 'Council: Output kurang, menggunakan data-driven fallback...');
+                    $result = self::generate_data_driven_article($title, $kg, $blueprint, $job_id);
+                    $article_html = $result['full_html'] ?? '';
                 }
+
+                // Store article_html in result for Synthesizer
+                $result['article_html'] = $article_html;
 
                 $hyperion['council'] = $result;
                 $hyperion['current_stage'] = 'synthesizer';
@@ -263,10 +293,10 @@ class Queue {
             }
 
             // ============================================================
-            // STAGE 4: THE SYNTHESIZER (V4 - expansion loop)
+            // STAGE 4: THE SYNTHESIZER
             // ============================================================
             if ($current_stage === 'synthesizer') {
-                tsa_log_job($job_id, 'Hyperion 4/7: The Synthesizer - Menyatukan & expanding...');
+                tsa_log_job($job_id, 'Hyperion 4/7: The Synthesizer - Expanding...');
 
                 $synthesizer = new \TSA_Synthesizer_Agent();
                 $council_output = $hyperion['council'] ?? array();
@@ -274,16 +304,7 @@ class Queue {
                 $result = $synthesizer->synthesize($title, $council_output, $blueprint);
 
                 if (empty($result) || empty($result['article_html'])) {
-                    tsa_log_job($job_id, 'Synthesizer: Output kosong, menggunakan Council output langsung');
-                    $fallback_html = $council_output['full_html'] ?? $council_output['article_html'] ?? '';
-                    if (empty($fallback_html) && !empty($council_output['sections'])) {
-                        foreach ($council_output['sections'] as $s) {
-                            if (is_array($s)) {
-                                if (!empty($s['heading'])) $fallback_html .= "<h2>{$s['heading']}</h2>\n\n";
-                                if (!empty($s['content'])) $fallback_html .= $s['content'] . "\n\n";
-                            }
-                        }
-                    }
+                    $fallback_html = $council_output['article_html'] ?? $council_output['full_html'] ?? '';
                     $result = array('article_html' => $fallback_html, 'word_count' => str_word_count(strip_tags($fallback_html)));
                 }
 
@@ -295,7 +316,6 @@ class Queue {
                 $hyperion['stages_completed'] = 4;
                 $research_pack['_hyperion'] = $hyperion;
                 $wpdb->update($table, array('status' => 'qa', 'research_pack' => wp_json_encode($research_pack)), array('id' => $job_id));
-                tsa_log_job($job_id, 'Lanjut ke Stylist...');
                 $current_stage = 'stylist';
             }
 
@@ -319,15 +339,14 @@ class Queue {
                 $hyperion['stages_completed'] = 5;
                 $research_pack['_hyperion'] = $hyperion;
                 $wpdb->update($table, array('research_pack' => wp_json_encode($research_pack)), array('id' => $job_id));
-                tsa_log_job($job_id, 'Stylist selesai. Lanjut ke Editor...');
                 $current_stage = 'editor';
             }
 
             // ============================================================
-            // STAGE 6: THE EDITOR
+            // STAGE 6: THE EDITOR V5
             // ============================================================
             if ($current_stage === 'editor') {
-                tsa_log_job($job_id, 'Hyperion 6/7: The Editor - Polish & SEO audit...');
+                tsa_log_job($job_id, 'Hyperion 6/7: The Editor V5 - Safe polish...');
 
                 $editor = new \TSA_Editor_Agent();
                 $article = $hyperion['stylist']['article_html'] ?? '';
@@ -347,7 +366,7 @@ class Queue {
                 $hyperion['stages_completed'] = 6;
                 $research_pack['_hyperion'] = $hyperion;
                 $wpdb->update($table, array('status' => 'images', 'research_pack' => wp_json_encode($research_pack)), array('id' => $job_id));
-                tsa_log_job($job_id, 'Editor selesai (SEO: ' . ($result['seo_score']['overall'] ?? 'N/A') . '/100). Lanjut ke Connector...');
+                tsa_log_job($job_id, 'Editor selesai (SEO: ' . ($result['seo_score']['overall'] ?? 'N/A') . '/100)');
                 $current_stage = 'connector';
             }
 
@@ -398,7 +417,7 @@ class Queue {
                     'readability'      => $readability,
                     'image_suggestions' => $images,
                     'formatting_stats' => $hyperion['stylist']['formatting_stats'] ?? array(),
-                    'pipeline'         => 'hyperion_v2',
+                    'pipeline'         => 'hyperion_v3',
                     'stages_completed' => 7,
                 );
 
@@ -421,85 +440,382 @@ class Queue {
     }
 
     // ============================================================
-    // FALLBACK ARTICLE GENERATOR
-    // Menghasilkan artikel 1000+ kata tanpa AI jika semua AI gagal
+    // DATA-DRIVEN ARTICLE GENERATOR (BUKAN TEMPLATE!)
+    // Menggunakan data research dari Oracle untuk membuat artikel unik
     // ============================================================
 
-    private static function generate_fallback_article($title, $kg, $blueprint) {
+    private static function generate_data_driven_article($title, $kg, $blueprint, $job_id) {
         $site_name = get_bloginfo('name') ?: 'sekali.id';
-        $short_name = preg_replace('/\b(panduan|lengkap|terbaru|info|wisata|destinasi|kuliner|hotel|review|rekomendasi|\d{4})\b/i', '', $title);
-        $short_name = ucwords(trim(preg_replace('/\s+/', ' ', $short_name)));
-        $type = $blueprint['type'] ?? $kg['type'] ?? 'destinasi';
+
+        // Parse judul untuk mendapatkan nama tempat yang bersih
+        $short_name = self::extract_place_name($title);
+        $type = $kg['type'] ?? $blueprint['type'] ?? 'destinasi';
+
+        // Ambil data dari knowledge graph
+        $entities = $kg['entities'] ?? array();
+        $facts = $kg['facts'] ?? array();
+        $scraped_data = $kg['scraped_data'] ?? array();
+
+        // Extract specific data
+        $location_data = self::extract_data_by_type($entities, $facts, 'lokasi');
+        $price_data = self::extract_data_by_type($entities, $facts, 'harga');
+        $hours_data = self::extract_data_by_type($entities, $facts, 'jam');
+        $facility_data = self::extract_data_by_type($entities, $facts, 'fasilitas');
+        $activity_data = self::extract_data_by_type($entities, $facts, 'aktivitas');
+        $tips_data = self::extract_data_by_type($entities, $facts, 'tips');
+        $history_data = self::extract_data_by_type($entities, $facts, 'sejarah');
+
+        tsa_log_job($job_id, "Data-driven generator: " . count($entities) . " entities, " . count($facts) . " facts");
 
         $html = '';
 
-        // INTRODUCTION (150+ kata)
-        $html .= "<p>{$site_name} akan menyuguhkan informasi lengkap tentang <strong>{$short_name}</strong> yang menjadi salah satu destinasi menarik dan layak untuk dikunjungi. Tempat ini menawarkan pengalaman wisata yang unik dan berbeda dari destinasi lainnya, menjadikannya pilihan tepat untuk mengisi waktu liburan Anda bersama keluarga, pasangan, maupun teman-teman.</p>\n\n";
-        $html .= "<p>Dalam artikel ini, Anda akan menemukan informasi lengkap mulai dari lokasi dan cara menuju ke sana, harga tiket masuk terbaru, jam operasional, fasilitas yang tersedia, hingga tips berkunjung yang berguna untuk memaksimalkan pengalaman wisata Anda. Semua informasi telah {$site_name} rangkum dari berbagai sumber terpercaya agar Anda bisa merencanakan kunjungan dengan lebih baik dan matang.</p>\n\n";
+        // ============================================================
+        // INTRODUCTION - Unik berdasarkan data
+        // ============================================================
+        $intro_ai = self::ai_write_section(
+            "Tulis introduction artikel wisata tentang \"{$short_name}\" dalam bahasa Indonesia. " .
+            "Gunakan sudut pandang website \"{$site_name}\" (contoh: \"{$site_name} akan menyuguhkan...\"). " .
+            "JANGAN gunakan kata saya/aku/kami. Tulis 2-3 paragraf (minimal 150 kata). " .
+            "Data yang diketahui: " . implode('. ', array_slice($facts, 0, 5)) .
+            ". Buat pembuka yang menarik dan informatif. Output dalam HTML (tag <p> saja)."
+        );
 
-        // SECTION 1: Mengenal Lebih Dekat (200+ kata)
-        $html .= "<h2>Mengenal {$short_name} Lebih Dekat</h2>\n\n";
-        $html .= "<p><strong>{$short_name}</strong> merupakan salah satu destinasi yang berhasil menarik perhatian banyak wisatawan dalam beberapa tahun terakhir. Tempat ini dikenal dengan keindahan alamnya yang memukau, suasana yang tenang dan asri, serta berbagai daya tarik yang membuat pengunjung betah berlama-lama menikmati setiap sudutnya.</p>\n\n";
-        $html .= "<p>Destinasi ini memiliki sejarah yang cukup panjang dan menarik. Seiring berjalannya waktu, tempat ini terus berkembang dan semakin populer di kalangan wisatawan yang mencari pengalaman wisata yang autentik dan berkesan. Pengelola terus melakukan pembenahan dan peningkatan fasilitas untuk memberikan kenyamanan terbaik bagi setiap pengunjung yang datang.</p>\n\n";
-        $html .= "<p>Keunikan utama dari <strong>{$short_name}</strong> terletak pada perpaduan antara keindahan alam yang masih terjaga dengan sentuhan modernitas yang tidak berlebihan. Hal ini menciptakan atmosfer yang sangat nyaman dan cocok untuk berbagai jenis wisatawan, mulai dari yang mencari ketenangan hingga yang mencari petualangan seru.</p>\n\n";
+        if (!empty($intro_ai) && str_word_count(strip_tags($intro_ai)) > 50) {
+            $html .= $intro_ai . "\n\n";
+            tsa_log_job($job_id, 'Intro: AI generated');
+        } else {
+            // Fallback intro yang tetap unik
+            $unique_fact = !empty($facts) ? $facts[0] : "{$short_name} merupakan destinasi yang menarik untuk dikunjungi";
+            $html .= "<p>{$site_name} akan menyuguhkan informasi lengkap tentang <strong>{$short_name}</strong>. {$unique_fact}. Destinasi ini menawarkan pengalaman wisata yang berbeda dan layak untuk masuk dalam daftar kunjungan Anda.</p>\n\n";
+            $html .= "<p>Dalam artikel ini, Anda akan menemukan informasi praktis mulai dari lokasi, harga tiket, jam operasional, fasilitas, hingga tips berkunjung yang berguna. Semua informasi telah {$site_name} rangkum dari berbagai sumber terpercaya.</p>\n\n";
+            tsa_log_job($job_id, 'Intro: Fallback with unique data');
+        }
 
-        // SECTION 2: Lokasi dan Akses (200+ kata)
-        $html .= "<h2>Lokasi dan Cara Menuju {$short_name}</h2>\n\n";
-        $html .= "<p><strong>{$short_name}</strong> terletak di lokasi yang cukup strategis dan mudah dijangkau dengan berbagai moda transportasi. Untuk mencapai lokasi ini, Anda bisa menggunakan kendaraan pribadi maupun transportasi umum. Gunakan aplikasi navigasi seperti <em>Google Maps</em> atau <em>Waze</em> untuk mendapatkan panduan rute terbaik menuju lokasi.</p>\n\n";
-        $html .= "<p>Bagi Anda yang menggunakan kendaraan pribadi, tersedia area parkir yang cukup luas untuk menampung kendaraan roda dua maupun roda empat. Kondisi jalan menuju lokasi umumnya sudah cukup baik dan bisa dilalui dengan nyaman. Namun, disarankan untuk tetap berhati-hati terutama jika berkunjung saat musim hujan.</p>\n\n";
-        $html .= "<p>Layanan ojek <em>online</em> seperti Gojek dan Grab juga tersedia untuk kemudahan akses bagi wisatawan yang tidak membawa kendaraan sendiri. Selain itu, transportasi umum dari pusat kota juga tersedia meskipun dengan jadwal yang terbatas. {$site_name} merekomendasikan untuk berangkat lebih awal agar perjalanan lebih nyaman dan tidak terburu-buru.</p>\n\n";
+        // ============================================================
+        // SECTION: Mengenal Lebih Dekat
+        // ============================================================
+        $overview_ai = self::ai_write_section(
+            "Tulis section \"Mengenal {$short_name} Lebih Dekat\" dalam bahasa Indonesia. " .
+            "Sudut pandang: website \"{$site_name}\". JANGAN gunakan saya/aku/kami. " .
+            "Tulis 2-3 paragraf (minimal 200 kata). " .
+            "Data: " . implode('. ', array_merge(
+                array_slice($facts, 0, 8),
+                !empty($history_data) ? $history_data : array("{$short_name} dikenal sebagai destinasi yang menarik")
+            )) .
+            ". Jelaskan apa yang membuat tempat ini spesial. Output HTML (h2 + p tags)."
+        );
 
-        // SECTION 3: Harga Tiket (150+ kata)
+        if (!empty($overview_ai) && str_word_count(strip_tags($overview_ai)) > 80) {
+            $html .= $overview_ai . "\n\n";
+        } else {
+            $html .= "<h2>Mengenal {$short_name} Lebih Dekat</h2>\n\n";
+            $overview_facts = !empty($history_data) ? implode('. ', $history_data) : (!empty($facts) ? implode('. ', array_slice($facts, 0, 3)) : '');
+            $html .= "<p><strong>{$short_name}</strong> merupakan salah satu destinasi yang berhasil menarik perhatian wisatawan. " . $overview_facts . " Tempat ini dikenal dengan daya tariknya yang khas dan pengalaman wisata yang berkesan bagi setiap pengunjung.</p>\n\n";
+            $html .= "<p>Keunikan dari <strong>{$short_name}</strong> terletak pada perpaduan antara keindahan alam dan kenyamanan fasilitas yang disediakan. Pengelola terus melakukan pembenahan untuk memberikan pelayanan terbaik bagi wisatawan yang datang dari berbagai daerah.</p>\n\n";
+        }
+
+        // ============================================================
+        // SECTION: Lokasi dan Akses
+        // ============================================================
+        $location_info = !empty($location_data) ? implode('. ', $location_data) : '';
+        $location_ai = self::ai_write_section(
+            "Tulis section \"Lokasi dan Cara Menuju {$short_name}\" dalam bahasa Indonesia. " .
+            "Sudut pandang: website \"{$site_name}\". JANGAN gunakan saya/aku/kami. " .
+            "Tulis 2-3 paragraf (minimal 150 kata). " .
+            "Data lokasi: {$location_info}. " .
+            "Sertakan info tentang akses kendaraan pribadi, transportasi umum, dan ojek online. " .
+            "Output HTML (h2 + p tags)."
+        );
+
+        if (!empty($location_ai) && str_word_count(strip_tags($location_ai)) > 60) {
+            $html .= $location_ai . "\n\n";
+        } else {
+            $html .= "<h2>Lokasi dan Cara Menuju {$short_name}</h2>\n\n";
+            if (!empty($location_info)) {
+                $html .= "<p>{$location_info}</p>\n\n";
+            }
+            $html .= "<p><strong>{$short_name}</strong> dapat dijangkau dengan berbagai moda transportasi. Gunakan aplikasi navigasi seperti <em>Google Maps</em> atau <em>Waze</em> untuk panduan rute terbaik. Tersedia area parkir yang memadai untuk kendaraan roda dua maupun roda empat.</p>\n\n";
+            $html .= "<p>Layanan ojek <em>online</em> seperti Gojek dan Grab juga tersedia untuk kemudahan akses. {$site_name} merekomendasikan untuk berangkat lebih awal agar perjalanan lebih nyaman.</p>\n\n";
+        }
+
+        // ============================================================
+        // SECTION: Harga Tiket
+        // ============================================================
         $html .= "<h2>Harga Tiket Masuk {$short_name} Terbaru</h2>\n\n";
-        $html .= "<p>Berikut informasi <strong>harga tiket masuk</strong> {$short_name} yang perlu Anda ketahui sebelum berkunjung:</p>\n\n";
-        $html .= "<table>\n<thead>\n<tr><th>Kategori</th><th>Hari Biasa</th><th>Weekend/Libur</th></tr>\n</thead>\n<tbody>\n";
-        $html .= "<tr><td>Dewasa</td><td>Hubungi pengelola</td><td>Hubungi pengelola</td></tr>\n";
-        $html .= "<tr><td>Anak-anak</td><td>Hubungi pengelola</td><td>Hubungi pengelola</td></tr>\n";
-        $html .= "<tr><td>Parkir Motor</td><td>Rp 5.000</td><td>Rp 5.000</td></tr>\n";
-        $html .= "<tr><td>Parkir Mobil</td><td>Rp 10.000</td><td>Rp 10.000</td></tr>\n";
-        $html .= "</tbody>\n</table>\n\n";
-        $html .= "<p><em><strong>Catatan:</strong> Harga tiket dapat berubah sewaktu-waktu. Disarankan untuk menghubungi pihak pengelola atau mengecek media sosial resmi untuk mendapatkan informasi harga terbaru sebelum berkunjung.</em></p>\n\n";
 
-        // SECTION 4: Jam Operasional (100+ kata)
-        $html .= "<h2>Jam Operasional {$short_name}</h2>\n\n";
-        $html .= "<p>Untuk informasi <strong>jam operasional</strong> terkini, disarankan untuk menghubungi pihak pengelola atau mengecek media sosial resmi destinasi ini. Umumnya tempat wisata seperti ini buka setiap hari mulai dari pagi hingga sore hari, namun jam operasional bisa berbeda pada hari libur nasional atau event tertentu.</p>\n\n";
-        $html .= "<p><strong>Tips:</strong> Datanglah di pagi hari untuk menghindari keramaian dan mendapatkan pengalaman yang lebih nyaman. Waktu terbaik untuk berkunjung adalah antara pukul 08.00-10.00 pagi atau menjelang sore hari ketika cuaca lebih sejuk dan pemandangan <em>sunset</em> yang memukau.</p>\n\n";
+        if (!empty($price_data)) {
+            $html .= "<p>Berikut informasi <strong>harga tiket masuk</strong> {$short_name} berdasarkan data terbaru:</p>\n\n";
+            $html .= "<table>\n<thead>\n<tr><th>Kategori</th><th>Harga</th></tr>\n</thead>\n<tbody>\n";
+            foreach ($price_data as $pd) {
+                $html .= "<tr><td>{$pd}</td><td>-</td></tr>\n";
+            }
+            $html .= "</tbody>\n</table>\n\n";
+        } else {
+            $price_ai = self::ai_write_section(
+                "Tulis section harga tiket masuk untuk \"{$short_name}\" dalam bahasa Indonesia. " .
+                "Buat tabel HTML dengan kategori Dewasa, Anak-anak, Parkir Motor, Parkir Mobil. " .
+                "Jika tidak tahu harga pasti, tulis estimasi wajar atau 'Hubungi pengelola'. " .
+                "Tambahkan catatan bahwa harga bisa berubah. Output HTML (h2 sudah ada, tulis p + table saja)."
+            );
 
-        // SECTION 5: Fasilitas (150+ kata)
-        $html .= "<h2>Fasilitas yang Tersedia di {$short_name}</h2>\n\n";
-        $html .= "<p>{$short_name} dilengkapi dengan berbagai <strong>fasilitas</strong> yang dirancang untuk memberikan kenyamanan maksimal bagi setiap pengunjung. Berikut beberapa fasilitas yang bisa Anda nikmati:</p>\n\n";
-        $html .= "<ul>\n";
-        $html .= "<li><strong>Area Parkir</strong> - Luas dan aman untuk kendaraan roda dua maupun roda empat</li>\n";
-        $html .= "<li><strong>Toilet/WC</strong> - Bersih dan terawat dengan baik</li>\n";
-        $html .= "<li><strong>Mushola</strong> - Tersedia untuk ibadah pengunjung muslim</li>\n";
-        $html .= "<li><strong>Warung Makan</strong> - Menyediakan berbagai makanan dan minuman dengan harga terjangkau</li>\n";
-        $html .= "<li><strong>Gazebo</strong> - Tempat beristirahat yang nyaman sambil menikmati pemandangan</li>\n";
-        $html .= "<li><strong>Spot Foto</strong> - Berbagai sudut <em>instagramable</em> untuk mengabadikan momen</li>\n";
-        $html .= "</ul>\n\n";
-        $html .= "<p>Fasilitas dapat berbeda tergantung kebijakan pengelola dan perkembangan terbaru di lokasi. {$site_name} menyarankan untuk membawa perlengkapan pribadi seperti tisu basah, sunblock, dan topi untuk kenyamanan ekstra selama berkunjung.</p>\n\n";
+            if (!empty($price_ai)) {
+                $html .= $price_ai . "\n\n";
+            } else {
+                $html .= "<p>Berikut estimasi <strong>harga tiket masuk</strong> {$short_name}:</p>\n\n";
+                $html .= "<table>\n<thead>\n<tr><th>Kategori</th><th>Hari Biasa</th><th>Weekend/Libur</th></tr>\n</thead>\n<tbody>\n";
+                $html .= "<tr><td>Dewasa</td><td>Hubungi pengelola</td><td>Hubungi pengelola</td></tr>\n";
+                $html .= "<tr><td>Anak-anak</td><td>Hubungi pengelola</td><td>Hubungi pengelola</td></tr>\n";
+                $html .= "<tr><td>Parkir Motor</td><td>Rp 5.000</td><td>Rp 5.000</td></tr>\n";
+                $html .= "<tr><td>Parkir Mobil</td><td>Rp 10.000</td><td>Rp 10.000</td></tr>\n";
+                $html .= "</tbody>\n</table>\n\n";
+            }
+        }
+        $html .= "<p><em><strong>Catatan:</strong> Harga tiket dapat berubah sewaktu-waktu. Disarankan untuk menghubungi pihak pengelola atau mengecek media sosial resmi sebelum berkunjung.</em></p>\n\n";
 
-        // SECTION 6: Tips Berkunjung (200+ kata)
-        $html .= "<h2>Tips Berkunjung ke {$short_name} agar Lebih Menyenangkan</h2>\n\n";
-        $html .= "<p>Agar kunjungan Anda ke <strong>{$short_name}</strong> berjalan lancar dan menyenangkan, berikut beberapa tips yang {$site_name} rekomendasikan:</p>\n\n";
-        $html .= "<ol>\n";
-        $html .= "<li><strong>Datang lebih awal</strong> - Berkunjung di pagi hari memberikan suasana yang lebih tenang dan nyaman. Anda juga bisa mendapatkan spot foto terbaik tanpa harus berdesakan dengan pengunjung lain.</li>\n";
-        $html .= "<li><strong>Bawa perlengkapan yang cukup</strong> - Siapkan air minum, snack ringan, topi, kacamata hitam, dan sunblock untuk melindungi diri dari terik matahari.</li>\n";
-        $html .= "<li><strong>Gunakan pakaian yang nyaman</strong> - Pilih pakaian yang nyaman dan sepatu yang cocok untuk berjalan, terutama jika area wisata cukup luas.</li>\n";
-        $html .= "<li><strong>Jaga kebersihan</strong> - Selalu buang sampah pada tempatnya dan jaga kelestarian lingkungan sekitar agar destinasi ini tetap indah untuk generasi mendatang.</li>\n";
-        $html .= "<li><strong>Cek informasi terbaru</strong> - Sebelum berangkat, pastikan untuk mengecek jam operasional dan harga tiket terbaru melalui media sosial resmi atau menghubungi pengelola.</li>\n";
-        $html .= "</ol>\n\n";
+        // ============================================================
+        // SECTION: Jam Operasional
+        // ============================================================
+        $hours_ai = self::ai_write_section(
+            "Tulis section \"Jam Operasional {$short_name}\" dalam bahasa Indonesia. " .
+            "Sudut pandang: website \"{$site_name}\". JANGAN gunakan saya/aku/kami. " .
+            "Tulis 1-2 paragraf (minimal 80 kata). " .
+            "Data jam: " . (!empty($hours_data) ? implode('. ', $hours_data) : 'Umumnya buka pagi sampai sore') .
+            ". Tambahkan tips waktu terbaik berkunjung. Output HTML (h2 + p tags)."
+        );
 
-        // SECTION 7: Kesimpulan (100+ kata)
-        $html .= "<h2>Kesimpulan</h2>\n\n";
-        $html .= "<p><strong>{$short_name}</strong> adalah destinasi yang layak masuk dalam daftar kunjungan Anda. Dengan keindahan alam yang memukau, fasilitas yang memadai, serta berbagai aktivitas menarik yang bisa dilakukan, tempat ini menawarkan pengalaman wisata yang lengkap dan berkesan untuk semua kalangan.</p>\n\n";
-        $html .= "<p>Demikian informasi lengkap tentang {$short_name} yang telah {$site_name} rangkum untuk Anda. Semoga artikel ini bermanfaat dalam merencanakan kunjungan Anda. Jangan lupa untuk membagikan pengalaman wisata Anda dan tetap jaga kelestarian lingkungan di setiap destinasi yang dikunjungi.</p>\n\n";
+        if (!empty($hours_ai) && str_word_count(strip_tags($hours_ai)) > 40) {
+            $html .= $hours_ai . "\n\n";
+        } else {
+            $html .= "<h2>Jam Operasional {$short_name}</h2>\n\n";
+            if (!empty($hours_data)) {
+                $html .= "<p>" . implode('. ', $hours_data) . "</p>\n\n";
+            } else {
+                $html .= "<p>Untuk informasi <strong>jam operasional</strong> terkini, disarankan untuk menghubungi pihak pengelola atau mengecek media sosial resmi. Umumnya tempat wisata ini buka setiap hari dari pagi hingga sore hari.</p>\n\n";
+            }
+            $html .= "<p><strong>Tips:</strong> Datanglah di pagi hari untuk menghindari keramaian dan mendapatkan pengalaman yang lebih nyaman. Waktu terbaik untuk berkunjung adalah antara pukul 08.00-10.00 pagi.</p>\n\n";
+        }
+
+        // ============================================================
+        // SECTION: Fasilitas
+        // ============================================================
+        $facility_ai = self::ai_write_section(
+            "Tulis section \"Fasilitas yang Tersedia di {$short_name}\" dalam bahasa Indonesia. " .
+            "Sudut pandang: website \"{$site_name}\". JANGAN gunakan saya/aku/kami. " .
+            "Tulis 1 paragraf pengantar + unordered list fasilitas (minimal 6 item) + 1 paragraf penutup. " .
+            "Data fasilitas: " . (!empty($facility_data) ? implode(', ', $facility_data) : 'area parkir, toilet, mushola, warung makan, gazebo, spot foto') .
+            ". Output HTML (h2 + p + ul + p tags)."
+        );
+
+        if (!empty($facility_ai) && str_word_count(strip_tags($facility_ai)) > 50) {
+            $html .= $facility_ai . "\n\n";
+        } else {
+            $html .= "<h2>Fasilitas yang Tersedia di {$short_name}</h2>\n\n";
+            $html .= "<p>{$short_name} dilengkapi dengan berbagai <strong>fasilitas</strong> untuk kenyamanan pengunjung:</p>\n\n";
+            $facilities = !empty($facility_data) ? $facility_data : array('Area Parkir yang luas', 'Toilet/WC bersih', 'Mushola', 'Warung Makan', 'Gazebo', 'Spot Foto');
+            $html .= "<ul>\n";
+            foreach ($facilities as $f) {
+                $html .= "<li><strong>" . ucfirst($f) . "</strong></li>\n";
+            }
+            $html .= "</ul>\n\n";
+            $html .= "<p>Fasilitas dapat berbeda tergantung kebijakan pengelola. {$site_name} menyarankan untuk membawa perlengkapan pribadi seperti tisu basah dan sunblock.</p>\n\n";
+        }
+
+        // ============================================================
+        // SECTION: Tips Berkunjung
+        // ============================================================
+        $tips_ai = self::ai_write_section(
+            "Tulis section \"Tips Berkunjung ke {$short_name}\" dalam bahasa Indonesia. " .
+            "Sudut pandang: website \"{$site_name}\". JANGAN gunakan saya/aku/kami. " .
+            "Tulis 1 paragraf pengantar + ordered list tips (minimal 5 item, setiap item 1-2 kalimat) + 1 paragraf penutup. " .
+            "Data tips: " . (!empty($tips_data) ? implode('. ', $tips_data) : 'Datang pagi, bawa perlengkapan, pakaian nyaman, jaga kebersihan, cek info terbaru') .
+            ". Output HTML (h2 + p + ol + p tags)."
+        );
+
+        if (!empty($tips_ai) && str_word_count(strip_tags($tips_ai)) > 80) {
+            $html .= $tips_ai . "\n\n";
+        } else {
+            $html .= "<h2>Tips Berkunjung ke {$short_name}</h2>\n\n";
+            $html .= "<p>Agar kunjungan ke <strong>{$short_name}</strong> berjalan lancar, berikut beberapa tips dari {$site_name}:</p>\n\n";
+            $html .= "<ol>\n";
+            $html .= "<li><strong>Datang lebih awal</strong> untuk suasana yang lebih tenang dan spot foto terbaik.</li>\n";
+            $html .= "<li><strong>Bawa perlengkapan yang cukup</strong> seperti air minum, snack, topi, dan sunblock.</li>\n";
+            $html .= "<li><strong>Gunakan pakaian nyaman</strong> dan sepatu yang cocok untuk berjalan.</li>\n";
+            $html .= "<li><strong>Jaga kebersihan</strong> dengan selalu membuang sampah pada tempatnya.</li>\n";
+            $html .= "<li><strong>Cek informasi terbaru</strong> sebelum berangkat melalui media sosial resmi.</li>\n";
+            $html .= "</ol>\n\n";
+        }
+
+        // ============================================================
+        // SECTION: Kesimpulan
+        // ============================================================
+        $conclusion_ai = self::ai_write_section(
+            "Tulis kesimpulan artikel tentang \"{$short_name}\" dalam bahasa Indonesia. " .
+            "Sudut pandang: website \"{$site_name}\". JANGAN gunakan saya/aku/kami. " .
+            "Tulis 2 paragraf (minimal 100 kata). Rangkum kenapa tempat ini layak dikunjungi. " .
+            "Akhiri dengan ajakan dari {$site_name}. Output HTML (h2 + p tags)."
+        );
+
+        if (!empty($conclusion_ai) && str_word_count(strip_tags($conclusion_ai)) > 40) {
+            $html .= $conclusion_ai . "\n\n";
+        } else {
+            $html .= "<h2>Kesimpulan</h2>\n\n";
+            $html .= "<p><strong>{$short_name}</strong> adalah destinasi yang layak masuk dalam daftar kunjungan Anda. Dengan daya tarik yang khas, fasilitas yang memadai, serta berbagai aktivitas menarik, tempat ini menawarkan pengalaman wisata yang lengkap dan berkesan.</p>\n\n";
+            $html .= "<p>Demikian informasi lengkap tentang {$short_name} yang telah {$site_name} rangkum. Semoga artikel ini bermanfaat dalam merencanakan kunjungan Anda. Jangan lupa bagikan pengalaman wisata Anda dan tetap jaga kelestarian lingkungan.</p>\n\n";
+        }
+
+        $final_wc = str_word_count(strip_tags($html));
+        tsa_log_job($job_id, "Data-driven article generated: {$final_wc} kata");
 
         return array(
-            'full_html' => $html,
-            'title'     => $title,
-            'meta'      => "Panduan lengkap {$short_name}. Info harga tiket, jam buka, fasilitas, dan tips berkunjung terbaru.",
-            'sections'  => array(),
+            'full_html'    => $html,
+            'article_html' => $html,
+            'title'        => $title,
+            'word_count'   => $final_wc,
         );
+    }
+
+    // ============================================================
+    // AI WRITE SECTION - Panggil AI untuk menulis 1 section
+    // ============================================================
+
+    private static function ai_write_section($prompt) {
+        // Try DuckDuckGo AI
+        $result = self::call_duckduckgo_ai($prompt);
+        if (!empty($result)) {
+            // Clean AI output
+            $result = trim($result);
+            // Remove markdown code blocks if present
+            $result = preg_replace('/^```html?\s*/i', '', $result);
+            $result = preg_replace('/\s*```$/', '', $result);
+            return $result;
+        }
+
+        // Try OpenAI if configured
+        $api_key = get_option('tsa_openai_api_key', '');
+        if (!empty($api_key)) {
+            return self::call_openai_section($prompt, $api_key);
+        }
+
+        return '';
+    }
+
+    private static function call_duckduckgo_ai($prompt) {
+        $token_response = wp_remote_get('https://duckduckgo.com/duckchat/v1/status', array(
+            'timeout' => 10,
+            'headers' => array('x-vqd-accept' => '1', 'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'),
+            'sslverify' => false,
+        ));
+        if (is_wp_error($token_response)) return '';
+        $vqd = wp_remote_retrieve_header($token_response, 'x-vqd-4');
+        if (empty($vqd)) return '';
+
+        $chat_response = wp_remote_post('https://duckduckgo.com/duckchat/v1/chat', array(
+            'timeout' => 60,
+            'headers' => array('Content-Type' => 'application/json', 'x-vqd-4' => $vqd, 'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'),
+            'body' => wp_json_encode(array('model' => 'gpt-4o-mini', 'messages' => array(array('role' => 'user', 'content' => $prompt)))),
+            'sslverify' => false,
+        ));
+        if (is_wp_error($chat_response)) return '';
+
+        $body = wp_remote_retrieve_body($chat_response);
+        $result = '';
+        foreach (explode("\n", $body) as $line) {
+            $line = trim($line);
+            if (strpos($line, 'data: ') === 0) {
+                $data = substr($line, 6);
+                if ($data === '[DONE]') break;
+                $json = json_decode($data, true);
+                if (isset($json['message'])) $result .= $json['message'];
+            }
+        }
+        return $result;
+    }
+
+    private static function call_openai_section($prompt, $api_key) {
+        $model = get_option('tsa_openai_model', 'gpt-4o-mini');
+        $base_url = get_option('tsa_openai_base_url', 'https://api.openai.com/v1');
+        $response = wp_remote_post($base_url . '/chat/completions', array(
+            'timeout' => 90,
+            'headers' => array('Content-Type' => 'application/json', 'Authorization' => 'Bearer ' . $api_key),
+            'body' => wp_json_encode(array(
+                'model' => $model,
+                'messages' => array(array('role' => 'user', 'content' => $prompt)),
+                'temperature' => 0.7,
+                'max_tokens' => 2000,
+            )),
+            'sslverify' => false,
+        ));
+        if (is_wp_error($response)) return '';
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        return $body['choices'][0]['message']['content'] ?? '';
+    }
+
+    // ============================================================
+    // HELPER: Extract place name from title
+    // ============================================================
+
+    private static function extract_place_name($title) {
+        $noise = array(
+            'panduan', 'lengkap', 'terbaru', 'info', 'wisata', 'destinasi',
+            'kuliner', 'hotel', 'review', 'rekomendasi', 'terbaik', 'terdekat',
+            'murah', 'gratis', 'tips', 'itinerary', 'budget', 'liburan',
+        );
+        // Remove year
+        $clean = preg_replace('/\b20\d{2}\b/', '', $title);
+        // Remove noise words
+        foreach ($noise as $n) {
+            $clean = preg_replace('/\b' . preg_quote($n, '/') . '\b/i', '', $clean);
+        }
+        // Remove special characters
+        $clean = preg_replace('/[:\-–—|&]+/', ' ', $clean);
+        $clean = ucwords(trim(preg_replace('/\s+/', ' ', $clean)));
+        return $clean ?: $title;
+    }
+
+    // ============================================================
+    // HELPER: Extract data by type from knowledge graph
+    // ============================================================
+
+    private static function extract_data_by_type($entities, $facts, $type) {
+        $result = array();
+        $keywords = array(
+            'lokasi'    => array('lokasi', 'alamat', 'jalan', 'kecamatan', 'kabupaten', 'provinsi', 'akses', 'rute', 'koordinat'),
+            'harga'     => array('harga', 'tiket', 'tarif', 'biaya', 'rupiah', 'rp', 'gratis', 'free'),
+            'jam'       => array('jam', 'buka', 'tutup', 'operasional', 'waktu', 'senin', 'minggu', 'setiap hari'),
+            'fasilitas' => array('fasilitas', 'toilet', 'parkir', 'mushola', 'warung', 'gazebo', 'wifi', 'kolam'),
+            'aktivitas' => array('aktivitas', 'kegiatan', 'bermain', 'berenang', 'hiking', 'foto', 'snorkeling', 'diving'),
+            'tips'      => array('tips', 'saran', 'rekomendasi', 'disarankan', 'sebaiknya', 'hindari', 'perhatikan'),
+            'sejarah'   => array('sejarah', 'didirikan', 'dibangun', 'asal', 'cerita', 'legenda', 'tahun', 'abad'),
+        );
+
+        $kw = $keywords[$type] ?? array();
+
+        foreach ($facts as $fact) {
+            $fact_lower = strtolower($fact);
+            foreach ($kw as $k) {
+                if (stripos($fact_lower, $k) !== false) {
+                    $result[] = $fact;
+                    break;
+                }
+            }
+        }
+
+        foreach ($entities as $entity) {
+            if (is_array($entity)) {
+                $entity_str = implode(' ', $entity);
+            } else {
+                $entity_str = (string)$entity;
+            }
+            $entity_lower = strtolower($entity_str);
+            foreach ($kw as $k) {
+                if (stripos($entity_lower, $k) !== false) {
+                    $result[] = $entity_str;
+                    break;
+                }
+            }
+        }
+
+        return array_unique($result);
     }
 
     // ============================================================

@@ -1,10 +1,12 @@
 <?php
 /**
- * Project Hyperion - Agent #4: The Synthesizer
- * Cohesive Narrative Weaving
+ * Project Hyperion - Agent #4: The Synthesizer V4
+ * Cohesive Narrative Weaving + Aggressive Content Expansion
  *
- * Tugas: Menyatukan semua draf dari The Council menjadi satu artikel
- * yang kohesif, mengalir mulus, tanpa pengulangan.
+ * Menerima output dari Council V4 (sudah berupa HTML lengkap)
+ * dan memastikan artikel minimal 1000 kata melalui expansion loop.
+ *
+ * @version 4.0.0
  */
 
 if (!defined('ABSPATH')) exit;
@@ -12,267 +14,208 @@ if (!defined('ABSPATH')) exit;
 class TSA_Synthesizer_Agent {
 
     private $site_name = '';
+    private $min_words = 1000;
 
     public function __construct() {
         $this->site_name = get_bloginfo('name') ?: 'sekali.id';
     }
 
     /**
-     * Synthesize semua draf menjadi satu artikel kohesif
+     * MAIN: Synthesize dan pastikan minimal 1000 kata
      */
     public function synthesize($title, $council_output, $blueprint) {
         $log = array();
-        $log[] = '[Synthesizer] Memulai penyatuan narasi untuk: "' . $title . '"';
+        $log[] = '[Synthesizer V4] Memulai penyatuan narasi untuk: "' . $title . '"';
 
-        $intro = $council_output['introduction'] ?? '';
-        $sections = $council_output['sections'] ?? array();
-        $conclusion = $council_output['conclusion'] ?? '';
-        $seo_title = $council_output['title'] ?? $title;
-        $meta = $council_output['meta'] ?? '';
+        // Council V4 sudah menghasilkan full_html
+        $full_html = '';
 
-        // Step 1: Assemble raw article
-        $raw_article = $this->assemble_article($seo_title, $intro, $sections, $conclusion);
-        $raw_word_count = str_word_count(strip_tags($raw_article));
-        $log[] = '[Synthesizer] Raw article: ' . $raw_word_count . ' kata';
-
-        // Step 2: Check word count dan expand jika perlu
-        $min_words = $blueprint['target_words']['min'] ?? 1500;
-        if ($raw_word_count < $min_words) {
-            $log[] = '[Synthesizer] Artikel kurang dari ' . $min_words . ' kata, expanding...';
-            $raw_article = $this->expand_article($title, $raw_article, $min_words, $log);
+        if (is_array($council_output) && !empty($council_output['full_html'])) {
+            $full_html = $council_output['full_html'];
+            $log[] = '[Synthesizer V4] Menggunakan full_html dari Council';
+        } elseif (is_array($council_output)) {
+            $full_html = $this->merge_sections($council_output);
+            $log[] = '[Synthesizer V4] Menggabungkan sections dari Council';
         }
 
-        // Step 3: AI polish untuk koherensi
-        $polished = $this->polish_coherence($title, $raw_article, $log);
+        $full_html = $this->clean_html($full_html);
+        $word_count = $this->count_words($full_html);
+        $log[] = "[Synthesizer V4] Word count awal: {$word_count}";
 
-        // Step 4: Remove duplicates dan redundancies
-        $cleaned = $this->remove_redundancies($polished);
+        // ============================================================
+        // EXPANSION LOOP: Pastikan minimal 1000 kata
+        // ============================================================
+        $expansion_round = 0;
+        $max_rounds = 5;
+        $short_name = $this->extract_short_name($title);
 
-        // Step 5: Final word count check
-        $final_word_count = str_word_count(strip_tags($cleaned));
-        $log[] = '[Synthesizer] ✓ Artikel final: ' . $final_word_count . ' kata';
+        while ($word_count < $this->min_words && $expansion_round < $max_rounds) {
+            $expansion_round++;
+            $needed = $this->min_words - $word_count;
+            $log[] = "[Synthesizer V4] Expansion round {$expansion_round}: perlu +{$needed} kata";
+
+            // Round 1: AI expansion
+            if ($expansion_round === 1) {
+                $ai_extra = $this->ai_expand($title, $needed);
+                if (!empty($ai_extra) && $this->count_words($ai_extra) > 80) {
+                    $full_html = $this->insert_before_end($full_html, $ai_extra);
+                }
+            }
+            // Round 2: FAQ section
+            elseif ($expansion_round === 2 && stripos($full_html, 'Pertanyaan yang Sering') === false) {
+                $full_html = $this->insert_before_end($full_html, $this->generate_faq($short_name));
+            }
+            // Round 3: Wisata terdekat
+            elseif ($expansion_round === 3 && stripos($full_html, 'Wisata Terdekat') === false) {
+                $full_html = $this->insert_before_end($full_html, $this->generate_nearby($short_name));
+            }
+            // Round 4: Pengalaman pengunjung
+            elseif ($expansion_round === 4 && stripos($full_html, 'Pengalaman') === false) {
+                $full_html = $this->insert_before_end($full_html, $this->generate_experience($short_name));
+            }
+            // Round 5: Expand paragraf
+            elseif ($expansion_round === 5) {
+                $full_html = $this->expand_paragraphs($full_html, $short_name);
+            }
+
+            $word_count = $this->count_words($full_html);
+            $log[] = "[Synthesizer V4] Setelah round {$expansion_round}: {$word_count} kata";
+        }
+
+        // Disclaimer
+        if (stripos($full_html, 'Disclaimer') === false) {
+            $full_html .= "\n\n<p><em><strong>Disclaimer:</strong> Informasi dalam artikel ini dapat berubah sewaktu-waktu. Untuk informasi terkini, silakan hubungi pihak pengelola atau kunjungi sumber resmi. Artikel ini ditulis oleh tim {$this->site_name} berdasarkan riset dari berbagai sumber terpercaya.</em></p>\n";
+        }
+
+        $word_count = $this->count_words($full_html);
+        $log[] = "[Synthesizer V4] ✓ Final: {$word_count} kata, {$expansion_round} expansion rounds";
 
         return array(
-            'article_html' => $cleaned,
-            'title'        => $seo_title,
-            'meta'         => $meta,
-            'word_count'   => $final_word_count,
-            'log'          => $log,
+            'article_html'     => $full_html,
+            'title'            => $council_output['title'] ?? $title,
+            'meta'             => $council_output['meta'] ?? '',
+            'word_count'       => $word_count,
+            'expansion_rounds' => $expansion_round,
+            'log'              => $log,
         );
     }
 
-    /**
-     * Assemble semua bagian menjadi satu artikel HTML
-     */
-    private function assemble_article($title, $intro, $sections, $conclusion) {
+    private function merge_sections($data) {
         $html = '';
-
-        // Introduction (tanpa heading)
-        if (!empty($intro)) {
-            $html .= "<!-- introduction -->\n";
-            $html .= $intro . "\n\n";
-        }
-
-        // Sections
-        foreach ($sections as $section) {
-            $heading = $section['heading'] ?? '';
-            $content = $section['content'] ?? '';
-
-            if (!empty($heading)) {
-                $html .= "<h2>{$heading}</h2>\n\n";
-            }
-            if (!empty($content)) {
-                $html .= $content . "\n\n";
+        if (!empty($data['introduction'])) $html .= $data['introduction'] . "\n\n";
+        if (!empty($data['sections']) && is_array($data['sections'])) {
+            foreach ($data['sections'] as $s) {
+                if (is_array($s)) {
+                    if (!empty($s['heading'])) $html .= "<h2>{$s['heading']}</h2>\n\n";
+                    if (!empty($s['content'])) $html .= $s['content'] . "\n\n";
+                } elseif (is_string($s)) {
+                    $html .= $s . "\n\n";
+                }
             }
         }
+        if (!empty($data['conclusion'])) $html .= $data['conclusion'] . "\n\n";
+        return $html;
+    }
 
-        // Conclusion
-        if (!empty($conclusion)) {
-            $html .= "<h2>Kesimpulan</h2>\n\n";
-            $html .= $conclusion . "\n\n";
+    private function ai_expand($title, $needed) {
+        $prompt = "Tulis 2-3 section tambahan tentang \"{$title}\" untuk website {$this->site_name}. Setiap section harus punya H2 heading dan 2-3 paragraf panjang (4-5 kalimat per paragraf). Gunakan HTML (<h2>, <p>, <strong>, <em>, <ul>). JANGAN gunakan kata saya/aku. Minimal 300 kata. Topik bisa: pengalaman pengunjung, wisata terdekat, tips khusus, atau fakta menarik.";
+
+        $result = $this->call_ai($prompt);
+        if (!empty($result)) return $this->clean_ai_output($result);
+        return '';
+    }
+
+    private function generate_faq($short_name) {
+        $html = "<h2>Pertanyaan yang Sering Diajukan Tentang {$short_name}</h2>\n\n";
+
+        $faqs = array(
+            array("Berapa harga tiket masuk {$short_name}?", "Harga <strong>tiket masuk</strong> {$short_name} dapat bervariasi tergantung musim dan kebijakan pengelola. Umumnya harga tiket untuk dewasa dan anak-anak berbeda. Disarankan untuk menghubungi pihak pengelola atau mengecek media sosial resmi untuk mendapatkan informasi harga <strong>terbaru</strong> sebelum berkunjung, karena harga dapat berubah sewaktu-waktu terutama pada musim liburan dan hari libur nasional."),
+            array("Kapan waktu terbaik untuk berkunjung ke {$short_name}?", "Waktu <strong>terbaik</strong> untuk berkunjung adalah pada pagi hari antara pukul 08.00-10.00 atau sore hari menjelang senja ketika cuaca lebih sejuk dan pemandangan lebih indah. Hindari berkunjung pada hari libur nasional jika Anda ingin menghindari keramaian. Musim kemarau (April-Oktober) umumnya menjadi waktu yang ideal karena cuaca yang lebih bersahabat."),
+            array("Apa saja fasilitas yang tersedia di {$short_name}?", "Umumnya tersedia <strong>fasilitas</strong> dasar seperti <strong>area parkir</strong> yang luas untuk kendaraan roda dua dan roda empat, toilet bersih, mushola untuk ibadah, dan warung makan. Beberapa area juga dilengkapi dengan gazebo untuk beristirahat, spot foto instagramable, dan area bermain anak."),
+            array("Bagaimana cara menuju {$short_name}?", "<strong>Lokasi</strong> ini dapat dijangkau dengan kendaraan pribadi maupun transportasi umum. Gunakan aplikasi navigasi seperti <em>Google Maps</em> atau <em>Waze</em> untuk panduan rute <strong>terbaik</strong>. Layanan ojek online seperti Gojek dan Grab juga tersedia untuk kemudahan akses."),
+            array("Apakah {$short_name} cocok untuk liburan keluarga?", "<strong>Destinasi</strong> ini sangat cocok untuk liburan keluarga. Atmosfer yang nyaman, pemandangan yang indah, dan <strong>fasilitas</strong> yang memadai menjadikannya pilihan tepat untuk menghabiskan waktu berkualitas bersama orang-orang tercinta. Anak-anak juga bisa menikmati berbagai aktivitas yang tersedia."),
+        );
+
+        foreach ($faqs as $faq) {
+            $html .= "<h3>{$faq[0]}</h3>\n<p>{$faq[1]}</p>\n\n";
         }
+        return $html;
+    }
 
+    private function generate_nearby($short_name) {
+        $html = "<h2>Destinasi Wisata Terdekat dari {$short_name}</h2>\n\n";
+        $html .= "<p>Selain mengunjungi <strong>{$short_name}</strong>, Anda juga bisa menjelajahi beberapa destinasi wisata terdekat yang tidak kalah menarik. Menggabungkan kunjungan ke beberapa tempat wisata dalam satu perjalanan bisa menjadi cara yang efisien untuk memaksimalkan pengalaman liburan Anda dan mendapatkan lebih banyak kenangan indah.</p>\n\n";
+        $html .= "<p>Daerah sekitar {$short_name} dikenal memiliki banyak potensi wisata yang beragam, mulai dari wisata alam yang menyegarkan, wisata budaya yang sarat akan nilai sejarah, hingga wisata kuliner yang memanjakan lidah. Dengan merencanakan <em>itinerary</em> yang baik, Anda bisa mengunjungi beberapa destinasi dalam satu hari dan mendapatkan pengalaman liburan yang lebih lengkap dan berkesan.</p>\n\n";
+        $html .= "<p>{$this->site_name} merekomendasikan untuk mengalokasikan waktu setidaknya satu hari penuh agar bisa menikmati seluruh destinasi di sekitar area ini. Jangan lupa untuk mencatat daftar tempat yang ingin dikunjungi dan mempersiapkan segala kebutuhan perjalanan agar liburan berjalan lancar tanpa hambatan.</p>\n\n";
+        return $html;
+    }
+
+    private function generate_experience($short_name) {
+        $html = "<h2>Pengalaman dan Ulasan Pengunjung {$short_name}</h2>\n\n";
+        $html .= "<p>Banyak pengunjung yang memberikan ulasan positif setelah berkunjung ke <strong>{$short_name}</strong>. Keindahan alam yang memukau, kebersihan lingkungan yang terjaga, dan keramahan pengelola serta masyarakat sekitar menjadi poin-poin yang sering mendapat apresiasi dari para wisatawan baik lokal maupun mancanegara.</p>\n\n";
+        $html .= "<p>Beberapa pengunjung merekomendasikan untuk mengalokasikan waktu setidaknya 2-3 jam agar bisa menikmati seluruh area wisata dengan santai tanpa terburu-buru. Bagi pecinta fotografi, tempat ini menjadi surga tersendiri dengan berbagai sudut yang <em>instagramable</em> dan pemandangan yang memukau di setiap sisinya.</p>\n\n";
+        $html .= "<blockquote><p><strong>Tips dari Pengunjung:</strong> Datanglah saat hari kerja untuk mendapatkan suasana yang lebih tenang dan leluasa dalam menjelajahi setiap sudut destinasi. Bawa juga bekal makanan ringan dan air minum yang cukup untuk menghemat pengeluaran selama berkunjung.</p></blockquote>\n\n";
+        return $html;
+    }
+
+    private function expand_paragraphs($html, $short_name) {
+        $extras = array(
+            "<p>Dengan berbagai keunggulan yang ditawarkan, tidak mengherankan jika <strong>{$short_name}</strong> menjadi salah satu destinasi favorit yang banyak direkomendasikan oleh para <em>traveler</em> dan <em>blogger</em> wisata. Setiap sudut tempat ini menyimpan pesona tersendiri yang sayang untuk dilewatkan begitu saja.</p>\n\n",
+            "<p>Bagi Anda yang sedang mencari inspirasi destinasi wisata untuk liburan berikutnya, <strong>{$short_name}</strong> layak masuk dalam daftar pertimbangan utama. Pengalaman berkunjung ke tempat ini dijamin akan meninggalkan kesan mendalam dan membuat Anda ingin kembali lagi di kesempatan berikutnya untuk menjelajahi lebih banyak sudut yang belum sempat dikunjungi.</p>\n\n",
+            "<p>Penting untuk diingat bahwa setiap destinasi wisata memiliki keunikan dan daya tariknya masing-masing. Yang membuat <strong>{$short_name}</strong> istimewa adalah perpaduan antara keindahan alam, kekayaan budaya, dan keramahan masyarakat setempat yang menciptakan pengalaman wisata yang autentik, berkesan, dan tidak akan terlupakan.</p>\n\n",
+        );
+        return $this->insert_before_end($html, implode('', $extras));
+    }
+
+    private function insert_before_end($html, $new_content) {
+        $patterns = array('/<h2[^>]*>\s*Kesimpulan/i', '/<h2[^>]*>\s*Penutup/i', '/<p><em><strong>Disclaimer/i');
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $html, $m, PREG_OFFSET_CAPTURE)) {
+                $pos = $m[0][1];
+                return substr($html, 0, $pos) . $new_content . "\n\n" . substr($html, $pos);
+            }
+        }
+        return $html . "\n\n" . $new_content;
+    }
+
+    private function clean_html($html) {
+        $html = preg_replace('/<p>\s*<\/p>/', '', $html);
+        $html = preg_replace('/\n{3,}/', "\n\n", $html);
         return trim($html);
     }
 
-    /**
-     * Expand artikel jika kurang dari target kata
-     */
-    private function expand_article($title, $article, $min_words, &$log) {
-        $current_words = str_word_count(strip_tags($article));
-        $needed = $min_words - $current_words + 200; // Extra buffer
-
-        $prompt = "Kamu adalah editor senior untuk website {$this->site_name}.
-
-TOPIK: {$title}
-
-Berikut adalah artikel yang sudah ditulis tetapi masih kurang panjang ({$current_words} kata, target minimal {$min_words} kata):
-
-{$article}
-
-TUGAS: Tambahkan konten BARU yang relevan untuk memperkaya artikel ini. Kamu perlu menambahkan sekitar {$needed} kata.
-
-ATURAN:
-1. JANGAN mengulang informasi yang sudah ada
-2. Tambahkan detail baru yang memperkaya setiap section
-3. Bisa menambahkan paragraf baru di section yang sudah ada
-4. Bisa menambahkan sub-section baru jika relevan (misalnya: wisata sekitar, pengalaman pengunjung, dll)
-5. Pertahankan format HTML yang sudah ada (<p>, <strong>, <em>, <table>, <ul>, <ol>)
-6. Gunakan <strong> untuk keyword penting
-7. JANGAN ubah struktur heading yang sudah ada
-8. Gaya bahasa harus konsisten dengan artikel yang sudah ada
-
-Output: Artikel lengkap yang sudah diperkaya (termasuk konten lama + konten baru). Format HTML.";
-
-        $result = $this->call_ai($prompt);
-
-        if (!empty($result) && str_word_count(strip_tags($result)) > $current_words) {
-            $log[] = '[Synthesizer] Expanded to ' . str_word_count(strip_tags($result)) . ' kata';
-            return $result;
-        }
-
-        // Fallback: tambahkan section FAQ
-        $faq = $this->generate_faq($title);
-        $article .= "\n\n<h2>Pertanyaan yang Sering Diajukan</h2>\n\n" . $faq;
-        $log[] = '[Synthesizer] Added FAQ section as expansion';
-
-        return $article;
+    private function count_words($html) {
+        $text = strip_tags($html);
+        $text = preg_replace('/\s+/', ' ', $text);
+        return str_word_count(trim($text));
     }
 
-    /**
-     * Generate FAQ section
-     */
-    private function generate_faq($title) {
-        $prompt = "Buat 5 FAQ (Frequently Asked Questions) tentang \"{$title}\" dalam format HTML.
-
-Format setiap FAQ:
-<h3>[Pertanyaan]</h3>
-<p>[Jawaban 2-3 kalimat yang informatif]</p>
-
-Pertanyaan harus relevan dan sering dicari orang. Jawaban harus spesifik dan membantu.
-JANGAN gunakan kata \"saya\" atau \"aku\".";
-
-        $result = $this->call_ai($prompt);
-
-        if (!empty($result)) return $result;
-
-        // Fallback FAQ
-        return "<h3>Berapa harga tiket masuk {$title}?</h3>\n<p>Harga tiket masuk dapat bervariasi tergantung musim dan kebijakan pengelola. Disarankan untuk menghubungi pihak pengelola atau mengecek informasi terbaru sebelum berkunjung.</p>\n\n<h3>Kapan waktu terbaik untuk berkunjung?</h3>\n<p>Waktu terbaik untuk berkunjung adalah pada pagi hari atau sore hari menjelang senja. Hindari hari libur nasional jika ingin menghindari keramaian.</p>\n\n<h3>Apa saja fasilitas yang tersedia?</h3>\n<p>Umumnya tersedia fasilitas dasar seperti area parkir, toilet, mushola, dan warung makan. Fasilitas dapat berbeda tergantung kebijakan pengelola.</p>\n\n<h3>Bagaimana cara menuju lokasi?</h3>\n<p>Lokasi dapat dijangkau dengan kendaraan pribadi maupun transportasi umum. Gunakan aplikasi navigasi seperti Google Maps untuk panduan rute terbaik.</p>\n\n<h3>Apakah cocok untuk liburan keluarga?</h3>\n<p>Destinasi ini sangat cocok untuk liburan keluarga. Suasana yang nyaman dan fasilitas yang memadai menjadikannya pilihan tepat untuk menghabiskan waktu bersama orang-orang tercinta.</p>";
+    private function extract_short_name($title) {
+        $title = preg_replace('/\b(panduan|lengkap|terbaru|info|wisata|destinasi|kuliner|hotel|review|rekomendasi|\d{4})\b/i', '', $title);
+        return ucwords(trim(preg_replace('/\s+/', ' ', $title)));
     }
 
-    /**
-     * Polish koherensi artikel dengan AI
-     */
-    private function polish_coherence($title, $article, &$log) {
-        // Jika artikel terlalu panjang untuk AI, skip polish
-        if (strlen($article) > 20000) {
-            $log[] = '[Synthesizer] Artikel terlalu panjang untuk AI polish, skip...';
-            return $article;
-        }
-
-        $prompt = "Kamu adalah editor senior untuk website {$this->site_name}. Tugasmu adalah mempoles artikel agar lebih kohesif dan mengalir natural.
-
-ARTIKEL:
-{$article}
-
-TUGAS EDITING:
-1. Perbaiki transisi antar paragraf agar mengalir mulus
-2. Hapus kalimat yang redundan atau berulang
-3. Pastikan gaya bahasa konsisten dari awal sampai akhir
-4. Pastikan TIDAK ADA kata \"saya\" atau \"aku\" - ganti dengan \"{$this->site_name}\" jika perlu
-5. Pastikan setiap <strong> digunakan untuk keyword penting (bukan berlebihan)
-6. Pastikan setiap <em> digunakan untuk istilah asing atau penekanan
-7. PERTAHANKAN semua heading (H2, H3), tabel, dan list yang sudah ada
-8. PERTAHANKAN format HTML
-9. JANGAN kurangi jumlah kata secara signifikan
-10. JANGAN tambahkan heading baru
-
-Output: Artikel yang sudah dipoles dalam format HTML yang sama.";
-
-        $result = $this->call_ai($prompt);
-
-        if (!empty($result) && str_word_count(strip_tags($result)) >= str_word_count(strip_tags($article)) * 0.8) {
-            $log[] = '[Synthesizer] AI polish berhasil';
-            return $result;
-        }
-
-        $log[] = '[Synthesizer] AI polish gagal, menggunakan basic cleanup';
-        return $this->basic_cleanup($article);
-    }
-
-    /**
-     * Remove redundancies dari artikel
-     */
-    private function remove_redundancies($article) {
-        // Remove duplicate paragraphs
-        $parts = preg_split('/(<h[2-6][^>]*>.*?<\/h[2-6]>|<table[\s\S]*?<\/table>|<[uo]l[\s\S]*?<\/[uo]l>)/i', $article, -1, PREG_SPLIT_DELIM_CAPTURE);
-
-        $seen_paragraphs = array();
-        $cleaned = '';
-
-        foreach ($parts as $part) {
-            // Skip headings, tables, lists - always keep them
-            if (preg_match('/^<(h[2-6]|table|[uo]l)/i', trim($part))) {
-                $cleaned .= $part;
-                continue;
-            }
-
-            // Check paragraphs for duplicates
-            $paragraphs = preg_split('/<\/p>/', $part);
+    private function clean_ai_output($text) {
+        $text = preg_replace('/^#{1,6}\s+/m', '', $text);
+        $text = preg_replace('/\*\*(.*?)\*\*/', '<strong>$1</strong>', $text);
+        $text = preg_replace('/(?<![<\/])\*([^*]+)\*/', '<em>$1</em>', $text);
+        if (strpos($text, '<p>') === false && strpos($text, '<h2') === false) {
+            $paragraphs = preg_split('/\n{2,}/', $text);
+            $html = '';
             foreach ($paragraphs as $p) {
                 $p = trim($p);
-                if (empty($p)) continue;
-
-                $clean_text = strtolower(strip_tags($p));
-                $clean_text = preg_replace('/\s+/', ' ', $clean_text);
-
-                // Check similarity with seen paragraphs
-                $is_duplicate = false;
-                foreach ($seen_paragraphs as $seen) {
-                    if (similar_text($clean_text, $seen, $percent) && $percent > 80) {
-                        $is_duplicate = true;
-                        break;
-                    }
-                }
-
-                if (!$is_duplicate && strlen($clean_text) > 20) {
-                    $seen_paragraphs[] = $clean_text;
-                    if (strpos($p, '<p>') === false && strpos($p, '<p ') === false) {
-                        $cleaned .= '<p>' . $p . "</p>\n\n";
-                    } else {
-                        $cleaned .= $p . "</p>\n\n";
-                    }
+                if (!empty($p) && strlen($p) > 10) {
+                    $html .= (strpos($p, '<') !== 0 ? '<p>' . $p . '</p>' : $p) . "\n\n";
                 }
             }
+            $text = $html;
         }
-
-        return trim($cleaned);
+        return trim($text);
     }
 
-    /**
-     * Basic cleanup tanpa AI
-     */
-    private function basic_cleanup($article) {
-        // Replace "saya" dan "aku"
-        $article = preg_replace('/\bsaya\b/i', $this->site_name, $article);
-        $article = preg_replace('/\baku\b/i', $this->site_name, $article);
-
-        // Clean excessive whitespace
-        $article = preg_replace('/\n{3,}/', "\n\n", $article);
-
-        // Ensure proper HTML structure
-        $article = preg_replace('/<p>\s*<\/p>/', '', $article);
-
-        return trim($article);
-    }
-
-    /**
-     * Call AI
-     */
     private function call_ai($prompt) {
         $result = $this->call_duckduckgo_ai($prompt);
-        if (!empty($result)) return $result;
-
+        if (!empty($result) && strlen($result) > 100) return $result;
         $api_key = get_option('tsa_openai_api_key', '');
         if (!empty($api_key)) return $this->call_openai($prompt, $api_key);
         return '';
@@ -280,20 +223,21 @@ Output: Artikel yang sudah dipoles dalam format HTML yang sama.";
 
     private function call_duckduckgo_ai($prompt) {
         $token_response = wp_remote_get('https://duckduckgo.com/duckchat/v1/status', array(
-            'timeout' => 10, 'headers' => array('x-vqd-accept' => '1', 'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'), 'sslverify' => false,
+            'timeout' => 10, 'headers' => array('x-vqd-accept' => '1', 'User-Agent' => 'Mozilla/5.0'), 'sslverify' => false,
         ));
         if (is_wp_error($token_response)) return '';
         $vqd = wp_remote_retrieve_header($token_response, 'x-vqd-4');
         if (empty($vqd)) return '';
 
-        $chat_response = wp_remote_post('https://duckduckgo.com/duckchat/v1/chat', array(
-            'timeout' => 60, 'headers' => array('Content-Type' => 'application/json', 'x-vqd-4' => $vqd, 'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'),
+        $response = wp_remote_post('https://duckduckgo.com/duckchat/v1/chat', array(
+            'timeout' => 90,
+            'headers' => array('Content-Type' => 'application/json', 'x-vqd-4' => $vqd, 'User-Agent' => 'Mozilla/5.0'),
             'body' => wp_json_encode(array('model' => 'gpt-4o-mini', 'messages' => array(array('role' => 'user', 'content' => $prompt)))),
             'sslverify' => false,
         ));
-        if (is_wp_error($chat_response)) return '';
+        if (is_wp_error($response)) return '';
 
-        $body = wp_remote_retrieve_body($chat_response);
+        $body = wp_remote_retrieve_body($response);
         $result = '';
         foreach (explode("\n", $body) as $line) {
             $line = trim($line);
@@ -311,11 +255,12 @@ Output: Artikel yang sudah dipoles dalam format HTML yang sama.";
         $model = get_option('tsa_openai_model', 'gpt-4o-mini');
         $base_url = get_option('tsa_openai_base_url', 'https://api.openai.com/v1');
         $response = wp_remote_post($base_url . '/chat/completions', array(
-            'timeout' => 90, 'headers' => array('Content-Type' => 'application/json', 'Authorization' => 'Bearer ' . $api_key),
+            'timeout' => 120,
+            'headers' => array('Content-Type' => 'application/json', 'Authorization' => 'Bearer ' . $api_key),
             'body' => wp_json_encode(array('model' => $model, 'messages' => array(
-                array('role' => 'system', 'content' => 'Kamu adalah editor senior untuk media wisata Indonesia.'),
+                array('role' => 'system', 'content' => 'Kamu adalah editor senior media wisata Indonesia. Tulis konten PANJANG dan INFORMATIF.'),
                 array('role' => 'user', 'content' => $prompt),
-            ), 'temperature' => 0.6, 'max_tokens' => 8000)),
+            ), 'temperature' => 0.7, 'max_tokens' => 8000)),
             'sslverify' => false,
         ));
         if (is_wp_error($response)) return '';
